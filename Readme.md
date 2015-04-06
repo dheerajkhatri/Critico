@@ -54,7 +54,6 @@ based rating for others like rating of a review.Main Page:
 
 
 
-1. Main page comprises of:
 ###Main Page:
   * a. Registration
   * b. About us related stuff
@@ -71,7 +70,6 @@ to show the OVERALL and the ASPECT based rating given by the user to the corresp
 
 
 ###SOAP Page:
-1. SOAP page comprises of:
    * a. SOAP Cover pic with the average OVERALL rating over it
    * b. A dock of SOAP cast linked to their wiki pages or their websites
    * c. A dock with seasons of the soap, each season's minimal description and each
@@ -83,10 +81,16 @@ reviews of the SOAP
    * f. A dock with the gossips and links related to the soap.
    * g. A dock with youtube thumbnails and links to the trailers of the SOAP Episodes
 
+###Season Page:
 2. All Season Page simply comprises of (c) with further detailing and SEASON BASED
 reviews of the SOAP.
+
+###Episode Page
+
 3. All Episode Page comprises of description of each episode of a particular season and
 EPISODE BASED reviews of the SOAP.
+
+###Episode's Page
 4. Single Episode Page comprises of the respective episode details with the SINGLE EP.
 BASED review.
 
@@ -94,3 +98,13 @@ BASED review.
 ###Review Page:
 1. Each review in any dock is hyper-linked to the corresponding full view review page which
 we call Review page.
+
+
+
+
+###How To Use 
+
+This Application is developed with web2py Framework.
+Application can be found in Applications/Critico Folder.
+We have used natural language processing tool kit.For that in models dict folder is added to process the reviews.
+
