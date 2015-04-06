@@ -41,23 +41,36 @@ Conventions Used
   * • User Page
   
 NOTE:
-• Only registered users can use the application.
-• A SEARCH BAR will be there on each page to help the user navigate to the desired SOAP Page.
-• Rating will be a 10-star based rating in some cases like overall rating of the soap and a 5 star
+
+  * • Only registered users can use the application.
+  * 
+  * • A SEARCH BAR will be there on each page to help the user navigate to the desired SOAP Page.
+  * 
+  * • Rating will be a 10-star based rating in some cases like overall rating of the soap and a 5 star
 based rating for others like rating of a review.Main Page:
+
+
+
 1. Main page comprises of:
-a. Registration
-b. About us related stuff
+
+  * a. Registration
+  * 
+  * b. About us related stuff
+
+
+
 2. Once you are logged in you'll be directed to User Page
+
+
 User Page:
 1. User page comprises of:
-a. A dock with a minimal personal info
-b. A dock with all the reviews written by the user
-c. A dock of the SOAPS rated by the user with an expandable (slide down) button
-to show the OVERALL and the ASPECT based rating given by the user to the
-corresponding soap.
-SOAP Page:
+  * a. A dock with a minimal personal info
+  * b. A dock with all the reviews written by the user
+  * c. A dock of the SOAPS rated by the user with an expandable (slide down) button
+to show the OVERALL and the ASPECT based rating given by the user to the corresponding soap.
 
+
+SOAP Page:
 
 1. SOAP page comprises of:
    * a. SOAP Cover pic with the average OVERALL rating over it
