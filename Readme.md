@@ -6,11 +6,14 @@ each season and finally, to provide latest spicy gossips associated with the sta
 soaps for the fans. Please read further for complete description of our application.
 Conventions Used
 
-####1. Page: A screen of the application
+####1. Page: 
+A screen of the application
   
-####2. Dock: Some fixed defined region of a Page.
+####2. Dock: 
+Some fixed defined region of a Page.
   
-####3. Review meter: A meter displaying average rating of the soap with respect to different aspects:
+####3. Review meter: 
+A meter displaying average rating of the soap with respect to different aspects:
   
   * Action
   
