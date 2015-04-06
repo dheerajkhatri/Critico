@@ -6,6 +6,7 @@ soaps for the fans. Please read further for complete description of our applicat
 Conventions Used
 • Page: A screen of the application
 • Dock: Some fixed defined region of a Page.
+
 • Review meter: A meter displaying average rating of the soap with respect to different aspects:
 • Action
 • Adventure
@@ -42,17 +43,20 @@ c. A dock of the SOAPS rated by the user with an expandable (slide down) button
 to show the OVERALL and the ASPECT based rating given by the user to the
 corresponding soap.
 SOAP Page:
+
+Ordered sub-list
 1. SOAP page comprises of:
-a. SOAP Cover pic with the average OVERALL rating over it
-b. A dock of SOAP cast linked to their wiki pages or their websites
-c. A dock with seasons of the soap, each season's minimal description and each
+   * a. SOAP Cover pic with the average OVERALL rating over it
+   * b. A dock of SOAP cast linked to their wiki pages or their websites
+   * c. A dock with seasons of the soap, each season's minimal description and each
 season's overall rating (if any)
-d. A dock with common reviews of the soap with a rating or likes to the respective
+   * d. A dock with common reviews of the soap with a rating or likes to the respective
 review
-e. A dock displaying a review meter which shows the average ASPECT based
+   * e. A dock displaying a review meter which shows the average ASPECT based
 reviews of the SOAP
-f. A dock with the gossips and links related to the soap.
-g. A dock with youtube thumbnails and links to the trailers of the SOAP Episodes
+   * f. A dock with the gossips and links related to the soap.
+   * g. A dock with youtube thumbnails and links to the trailers of the SOAP Episodes
+
 2. All Season Page simply comprises of (c) with further detailing and SEASON BASED
 reviews of the SOAP.
 3. All Episode Page comprises of description of each episode of a particular season and
