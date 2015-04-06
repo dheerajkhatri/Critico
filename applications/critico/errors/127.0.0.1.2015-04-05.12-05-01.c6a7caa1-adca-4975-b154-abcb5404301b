@@ -1,0 +1,737 @@
+(dp1
+S'output'
+p2
+S"<type 'exceptions.TypeError'> addToProductAspectsScore() takes exactly 2 arguments (1 given)"
+p3
+sS'layer'
+p4
+S'/home/dhruv/web2py/applications/critico/controllers/default.py'
+p5
+sS'code'
+p6
+S'# -*- coding: utf-8 -*-\n# this file is released under public domain and you can use without limitations\n\n#########################################################################\n## This is a sample controller\n## - index is the default action of any application\n## - user is required for authentication and authorization\n## - download is for downloading files uploaded in the db (does streaming)\n## - api is an example of Hypermedia API support and access control\n#########################################################################\n\nINDEX_PAGE=\'index\'\nPRODUCT_INDEX_PAGE=\'product_index\'\nPRODUCT_PROFILE_PAGE=\'product_profile\'\nEDITION_MANAGER_PAGE=\'edition_manager\'\nEDITION_PROFILE_PAGE=\'edition_profile\'\nSUB_EDITION_PROFILE_PAGE=\'sub_edition_profile\'\nCONTRIBUTOR_MANAGER_PAGE=\'contributor_manager\'\nCONTRIBUTOR_PROFILE_PAGE=\'contributor_profile\'\n\nimport urllib2\nimport numpy as np\nfrom pprint import pprint\nimport nltk\nimport yaml\nimport sys\nimport os\nimport re\n\nMAX_RATING=11\nMAX_VOTING=2\n\ndef index():\n    """\n    example action using the internationalization operator T and flash\n    rendered by views/default/index.html or views/generic.html\n\n    if you need a simple wiki simply replace the two lines below with:\n    return auth.wiki()\n    """\n    if not session.auth:\n        return userIndex()\n    userId = auth.user_id\n    userType = getAuthUserType(userId)\n    if userType == \'a\':\n        return userIndex()\n    elif userType == \'b\':\n        return productIndex()\n\ndef userIndex():\n    form = SQLFORM.factory(Field(\'product_name\', requires=[IS_NOT_EMPTY()]), submit_button=\'Search\', table_name=\'search_product\')\n    if not session.auth:\n        form.add_button(\'Login\', URL(\'user/login\'))\n        form.add_button(\'Register\', URL(\'user/register\'))\n    if form.accepts(request, session):\n        redirect(URL(urllib2.quote(\'product_index/\'+form.vars.product_name)))\n    return dict(message=\'Hi user\', form=form)\n\ndef product_index():\n    if isProductWithThisNameExists(urllib2.unquote(request.args(0))):\n        return getProductPage(getProductIdOf(urllib2.unquote(request.args(0))))\n    else:\n        return dict(message=\'Product not found!\', form=FORM())\n\ndef getProductPage(prodId):\n    return dict(product_info=getAuthBasedProductProfile(prodId), edition_info=getAuthBasedAllEditonForm(prodId), contrib_info=getAuthBasedAllContributorForm(prodId), news_info=getAuthBasedAllNewsForm(prodId), video_info=getAuthBasedAllVideoForm(\'product\', prodId), review_info=getAuthBasedReviewForm(\'product\', prodId))\n\n\ndef productIndex():\n    rows = db(db.product.admin_ref == auth.user_id).select()\n    if rows:\n        redirect(URL(urllib2.quote((\'product_index/\'+str(rows[0].name)))))\n\n    form = SQLFORM.factory(submit_button=\'Update Product Profile\', table_name=\'update_product_profile\')\n    if form.accepts(request, session):\n        prodId = getProductIdOrNewProductId()\n        redirect(URL((\'product_index/\'+str(auth.user_id))))\n    return dict(message=\'Hi Product Admin\', form=form)\n\ndef product_profile():\n    prodId = getProductWithThisAdminId()\n    return dict(form=getEditableProductProfile(prodId))\n\ndef edition_manager():\n    prodId = getProductWithThisAdminId()\n    return dict(form=getEditableEditionManager(prodId))\n\ndef edition_profile():\n    edId = request.vars.ed\n    prodId = int(request.vars.prod)\n\n    if edId == \'\':\n        edId = -1\n    else:\n        edId = int(edId)\n        if prodId != getEditionProductId(edId):\n            return\n    return dict(edition_info=getAuthBasedEditionForm(edId, prodId), sub_edition_info=getAuthBasedAllSubEditonForm(edId), video_info=getAuthBasedAllVideoForm(\'edition\', edId), form=getAuthBasedReviewForm(\'edition\', edId))\n\ndef sub_edition_profile():\n    edId = int(request.vars.ed)\n    subEdId = request.vars.subed\n\n    if subEdId == \'\':\n        subEdId = -1\n    else:\n        subEdId = int(subEdId)\n        if edId != getSubEditionEditionId(subEdId):\n            return\n    return dict(sub_edition_info=getAuthBasedSubEditionForm(subEdId, edId), video_info=getAuthBasedAllVideoForm(\'sub_edition\', subEdId), form=getAuthBasedReviewForm(\'sub_edition\', subEdId))\n\ndef contributor_manager():\n    prodId = getProductIdOrNewProductId()\n    return dict(form=getContributorManager(prodId))\n\ndef contributor_profile():\n    contribId = request.vars.contrib\n    prodId = getProductIdOrNewProductId()\n    if contribId == \'\':\n        contribId = -1\n    else:\n        contribId = int(contribId)\n        if prodId != getContributorProductId(contribId):\n            return\n    return dict(form=getContributorProfile(contribId, prodId))\n\n\ndef user():\n    """\n    exposes:\n    http://..../[app]/default/user/login\n    http://..../[app]/default/user/logout\n    http://..../[app]/default/user/register\n    http://..../[app]/default/user/register_user\n    http://..../[app]/default/user/register_product_admin\n    http://..../[app]/default/user/profile\n    http://..../[app]/default/user/retrieve_password\n    http://..../[app]/default/user/change_password\n    http://..../[app]/default/user/manage_users (requires membership in\n    use @auth.requires_login()\n        @auth.requires_membership(\'group name\')\n        @auth.requires_permission(\'read\',\'table name\',record_id)\n    to decorate functions that need access control\n    """\n    if request.args(0) == \'register\':\n        return dict(form=getRegistrationOptionForm())\n    elif request.args(0) == \'register_user\':\n        return dict(form=getUserRegistrationForm())\n    elif request.args(0) == \'register_product_admin\':\n        return dict(form=getProductAdminRegistrationForm())\n    elif request.args(0) == \'profile\':\n        return dict(form=getProfileForm())\n    return dict(form=auth())\n\n@cache.action()\ndef download():\n    """\n    allows downloading of uploaded files\n    http://..../[app]/default/download/[filename]\n    """\n    return response.download(request, db)\n\n\ndef call():\n    """\n    exposes services. for example:\n    http://..../[app]/default/call/jsonrpc\n    decorate with @services.jsonrpc the functions to expose\n    supports xml, json, xmlrpc, jsonrpc, amfrpc, rss, csv\n    """\n    return service()\n\n\n@auth.requires_login() \ndef api():\n    """\n    this is example of API with access control\n    WEB2PY provides Hypermedia API (Collection+JSON) Experimental\n    """\n    from gluon.contrib.hypermedia import Collection\n    rules = {\n        \'<table_name>\': {\'GET\':{},\'POST\':{},\'PUT\':{},\'DELETE\':{}},\n        }\n    return Collection(db).process(request,response,rules)\n\n\'\'\'\nUser Functions\nStart\n\'\'\'\n\ndef selectAuthUser(userId):\n    return db(db.auth_user.id == userId).select()\n\ndef getAuthUserFirstName(userId):\n    rows = selectAuthUser(userId)\n    if rows:\n        return rows[0].first_name\n\ndef getAuthUserLastName(userId):\n    rows = selectAuthUser(userId)\n    if rows:\n        return rows[0].last_name\n\ndef getAuthUserUserName(userId):\n    rows = selectAuthUser(userId)\n    if rows:\n        return rows[0].username\n\ndef getAuthUserPicBlob(userId):\n    rows = selectAuthUser(userId)\n    if rows:\n        return rows[0].display_picture_blob\n\ndef getAuthUserPicName(userId):\n    rows = selectAuthUser(userId)\n    if rows:\n        return rows[0].display_picture_name\n\ndef getAuthUserEMail(userId):\n    rows = selectAuthUser(userId)\n    if rows:\n        return rows[0].email\n\ndef updateAuthUserUserType(userId, userType):\n    db(db.auth_user.id == userId).update(user_type = userType)\n\ndef makeAuthUSerUser(userId):\n    updateAuthUserUserType(userId, \'a\')\n\ndef makeAuthUSerSoapAdmin(userId):\n    updateAuthUserUserType(userId, \'b\')\n\ndef approveAuthUser(userId):\n    db(db.auth_user.id == userId).update(registration_key=\'\')\n\ndef getUserRegistrationForm():\n    form = getRegistrationForm()\n    if form.accepts(request, session):\n        makeAuthUSerUser(form.vars.id)\n        approveAuthUser(form.vars.id)\n    return form\n\ndef getProductAdminRegistrationForm():\n    form = getRegistrationForm()\n    if form.accepts(request, session):\n        makeAuthUSerSoapAdmin(form.vars.id)\n        approveAuthUser(form.vars.id)   ## ------------------- This line will be removed in production\n    return form\n\ndef disalbeAuthFieldReadOrWrite(fieldList):\n    for field in fieldList:\n        db.auth_user[field].readable = db.auth_user[field].writable = False\n\ndef getRegistrationForm():\n    disalbeAuthFieldReadOrWrite([\'gender\', \'date_of_birth\', \'country\', \'state_\', \'city\', \'display_picture_name\', \'display_picture_blob\'])\n    return auth.register()\n\ndef getRegistrationOptionForm():\n    form = SQLFORM.factory(submit_button=\'Users, Click here!\', table_name=\'reg_form\')\n    form.add_button(\'Product Admin, Click Here!\', URL(\'user/register_product_admin\'))\n    if form.accepts(request, session):\n        redirect(URL(\'user/register_user\'))\n    return form\n\n@auth.requires_login()\ndef getProfileForm():\n    disalbeAuthFieldReadOrWrite([\'username\'])\n    return auth.profile()\n\ndef getAuthUserType(userId):\n    return db(db.auth_user.id == userId).select()[0].user_type\n\n\'\'\'\nUser Functions\nEnd\n\'\'\'\n\n\'\'\'\nProduct Functions\nStart\n\'\'\'\ndef insertProduct(prodName, picName, picBlob):\n    return db.product.insert(name=prodName, display_picture_name=picName, display_picture_blob=picBlob)\n\ndef initProduct():\n    return db.product.insert()\n\ndef selectProduct(prodId):\n    return db(db.product.id == prodId).select()\n\ndef updateProductAspectsScore(prodId, aspectsScoreList):\n    rows = selectProduct(prodId)\n    if rows:\n        db(db.product.id == prodId).update(aspects_score=aspectsScoreList)\n\ndef addToProductAspectsScore(prodId, aspectsScore):\n    rows = selectProduct(prodId)\n    if rows:\n        scoreList = rows.aspects_score\n        if len(scoreList) != len(aspectsScore):\n            print \'error len not same\'\n            return\n        else:\n            for i in range(len(aspectsScore)):\n                scoreList[i] += aspectsScore[i]\n            updateProductAspectsScore(prodId, scoreList)\n\n\ndef isProductWithThisIdExists(prodId):\n    if not selectProduct(prodId):\n        return False\n    else:\n        return True\n\ndef isThisIsTheProductAdmin(prodId, userId):\n    rows = selectProduct(prodId)\n    if rows:\n        if rows[0].admin_ref == userId:\n            return True\n    return False\n\ndef getProductIdOf(prodName):\n    if isProductWithThisNameExists(prodName):\n        return db(db.product.name == prodName).select()[0].id\n    else:\n        return -1\n\ndef isProductWithThisNameExists(prodName):\n    if not db(db.product.name == prodName).select():\n        return False\n    else:\n        return True\n\ndef getProductName(prodId):\n    rows = selectProduct(prodId)\n    if rows:\n        return rows[0].name\n\ndef updateProductName(prodId, name_):\n    rows = selectProduct(prodId)\n    if rows:\n        db(db.product.id == prodId).update(name=name_)\n\ndef getProductPicName(prodId):\n    rows = selectProduct(prodId)\n    if rows:\n        return rows[0].display_picture_name\n\ndef updateProductPicName(prodId, picName):\n    rows = selectProduct(prodId)\n    if rows:\n        db(db.product.id == prodId).update(display_picture_name=picName)\n\ndef getProductPicBlob(prodId):\n    rows = selectProduct(prodId)\n    if rows:\n        return rows[0].display_picture_blob\n\ndef updateProductPicBlob(prodId, picBlob):\n    rows = selectProduct(prodId)\n    if rows:\n        db(db.product.id == prodId).update(display_picture_blob=picBlob)\n\n\ndef updateProductPic(prodId, picName, picBlob):\n    db(db.product.id == prodId).update(display_picture_name=picName, display_picture_blob=picBlob)\n\ndef getProductIdOrNewProductId():\n    val = getProductWithThisAdminId()\n    if val == -1:\n        return initProduct()\n    else:\n        return val\n\ndef getProductWithThisAdminId():\n    rows = db(db.product.admin_ref == auth.user_id).select()\n    if(not rows):\n        return -1\n    else:\n        return rows[0].id\n\ndef getEditableProductProfile(prodId):\n    update = db.product(prodId)\n    form = SQLFORM(db.product, update, submit_button=\'Apply Changes\', showid=False, upload=URL(r=request,f=\'download\'))\n    form[0].insert(-1,getNetRatingOfProductAsTR(prodId))\n    if form.accepts(request, session):\n        response.flash=\'submitted\'\n    return form\n\n\ndef getNetRatingOfProductAsTR(prodId):\n    return TR(TD(LABEL(\'Net Rating\'), _class="w2p_fl"), TD(XML(\'<i>\'+str(getProductRating(prodId))+\'</i>\'), _class="w2p_fw"))\n\ndef productRatingProcessing(form):\n    if (not session.auth) or auth.user.user_type==\'b\':\n       form.errors.your_rating = \'Only registered users are allowed to rate\'\n\ndef getNonEditableProductProfile(prodId):\n    update = db.product(prodId)\n    form = SQLFORM(db.product, update, buttons=[], showid=False , readonly=True, upload=URL(r=request,f=\'download\'))\n    form[0].insert(-1,getNetRatingOfProductAsTR(prodId))\n    rateForm = SQLFORM.factory(Field(\'your_rating\', type=\'integer\', requires=[IS_INT_IN_RANGE(1,MAX_RATING)], default=getProductRatingByThisUser(prodId)), table_name=(\'product_\'+str(prodId)))\n    if rateForm.accepts(request, session, onvalidation=productRatingProcessing):\n        insertProductRating(prodId, rateForm.vars.your_rating)\n        redirect(URL(args=request.args, vars=request.get_vars, host=True))\n    form.append(rateForm)\n    return form\n\ndef getAuthBasedProductProfile(prodId):\n    if isThisIsTheProductAdmin(prodId, auth.user_id):\n        return getEditableProductProfile(prodId)\n    else:\n        return getNonEditableProductProfile(prodId)\n\ndef getProductUsersRated(prodId):\n    rows = selectProduct(prodId)\n    if rows:\n        return rows[0].users_rated\n\ndef updateProductUsersRatedList(prodId, usersRatedList):\n    rows = selectProduct(prodId)\n    if rows:\n        db(db.product.id == prodId).update(users_rated=usersRatedList)\n\n\ndef getProductUsersRating(prodId):\n    rows = selectProduct(prodId)\n    if rows:\n        return rows[0].users_rating\n\ndef updateProductUsersRatingList(prodId, usersRatingList):\n    rows = selectProduct(prodId)\n    if rows:\n        db(db.product.id == prodId).update(users_rating=usersRatingList)\n\ndef insertProductRating(prodId, score):\n    usersRatedList = getProductUsersRated(prodId)\n    usersRatingList = getProductUsersRating(prodId)\n    if not usersRatedList:\n        usersRatedList=[auth.user_id]\n        usersRatingList=[score]\n        updateProductUsersRatedList(prodId, usersRatedList)\n        updateProductUsersRatingList(prodId, usersRatingList)\n\n    if auth.user_id in usersRatedList:\n        ind = usersRatedList.index(auth.user_id)\n        usersRatingList[ind] = score\n        updateProductUsersRatingList(prodId, usersRatingList)\n    else:\n        usersRatedList.append(auth.user_id)\n        usersRatingList.append(score)\n        updateProductUsersRatedList(prodId, usersRatedList)\n        updateProductUsersRatingList(prodId, usersRatingList)\n\ndef getProductRating(prodId):\n    usersRatingList = getProductUsersRating(prodId)\n    if not usersRatingList:\n        return 0\n    return (1.0*sum(usersRatingList))/len(usersRatingList)\n\ndef getProductRatingByThisUser(prodId):\n    usersRatedList = getProductUsersRated(prodId)\n    score = 0\n    if (not session.auth) or (not usersRatedList):\n        return 0\n    if auth.user_id in usersRatedList:\n        usersRatingList = getProductUsersRating(prodId)\n        ind = usersRatedList.index(auth.user_id)\n        score = usersRatingList[ind]\n    return score\n\n\'\'\'\nProduct Functions\nEnd\n\'\'\'\n\n\'\'\'\nEdition Functions\nStart\n\'\'\'\n\ndef insertEdition(prodId, name_, number_, dor, desc, picName, picBlob):\n    return db.edition.insert(product_ref=prodId, name=name_, number=number_, date_of_release=dor, description=desc, display_picture_name=picName, display_picture_blob=picBlob)\n\ndef initEdition(prodId):\n    return db.edition.insert(product_ref=prodId)\n\ndef isEditionWithThisIdExists(edId):\n    if not db(db.edition.id == edId).select():\n        return False\n    else:\n        return True\n\ndef selectEdition(edId):\n    return db(db.edition.id == edId).select()\n\ndef isThisTheEditionAdmin(edId, userId):\n    prodId = getProductWithThisAdminId()\n    rows = selectEdition(edId)\n    if rows:\n        if rows[0].product_ref == prodId:\n            return True\n    return False\n\ndef getEditionProductId(edId):\n    rows = selectEdition(edId)\n    if rows:\n        return rows[0].product_ref\n\ndef updateEditionProductId(edId, prodId):\n    rows = selectEdition(edId)\n    if rows:\n        db(db.edition.id == edId).update(product_ref=prodId)\n\ndef getEditionName(edId):\n    rows = selectEdition(edId)\n    if rows:\n        return rows[0].name\n\ndef updateEditionName(edId, name_):\n    rows = selectEdition(edId)\n    if rows:\n        db(db.edition.id == edId).update(name=name_)\n\ndef getEditionNumber(edId):\n    rows = selectEdition(edId)\n    if rows:\n        return rows[0].number_\n\ndef updateEditionNumber(edId, num):\n    rows = selectEdition(edId)\n    if rows:\n        db(db.edition.id == edId).update(number_=num)\n\ndef getEditionDOR(edId):\n    rows = selectEdition(edId)\n    if rows:\n        return rows[0].date_of_release\n\ndef updateEditionDOR(edId, dor):\n    rows = selectEdition(edId)\n    if rows:\n        db(db.edition.id == edId).update(date_of_release=dor)\n\ndef getEditionDesc(edId):\n    rows = selectEdition(edId)\n    if rows:\n        return rows[0].description\n\ndef updateEditionDesc(edId, desc):\n    rows = selectEdition(edId)\n    if rows:\n        db(db.edition.id == edId).update(description=desc)\n\ndef getEditionPicName(edId):\n    rows = selectEdition(edId)\n    if rows:\n        return rows[0].display_picture_name\n\ndef updateEditionPicName(edId, name_):\n    rows = selectEdition(edId)\n    if rows:\n        db(db.edition.id == edId).update(display_picture_name=name_)\n\ndef getEditionPicBlob(edId):\n    rows = selectEdition(edId)\n    if rows:\n        return rows[0].display_picture_blob\n\ndef updateEditionPicBlob(edId, picBlob):\n    rows = selectEdition(edId)\n    if rows:\n        db(db.edition.id == edId).update(display_picture_blob=blob)\n\n## Returns listof  editions if exists else -1\ndef getEditionsWithThisProductId(prodId):\n    rows = db(db.edition.product_ref == prodId).select()\n    if(not rows):\n        return -1\n    else:\n        return rows\n\ndef getEditableEditionManager(prodId):\n    form = SQLFORM.factory(submit_button=\'Add Edition\', table_name=\'edition_add\')\n    form.add_button(\'Back\', URL(INDEX_PAGE))\n    rows = db(db.edition.product_ref == prodId).select()\n    for row in rows:\n        str_=(\'Edit Edition #\' + str(row.number_))\n        form.add_button(str_, URL(EDITION_PROFILE_PAGE, vars=dict(ed=str(row.id))))\n    if form.accepts(request, session):\n        redirect(URL(EDITION_PROFILE_PAGE, vars=dict(ed=\'\')))\n    return form\n\ndef getAuthBasedEditionForm(edId, prodId):\n    if isThisIsTheProductAdmin(prodId, auth.user_id):\n        return getEditableEditionForm(edId, prodId)\n    else:\n        return getNonEditableEditionForm(edId, prodId)\n    \'\'\'  ## for sub editions\n    rows = db(db.sub_edition.edition_ref == edId).select()\n    for row in rows:\n        str_=(\'Edit Sub Edition #\' + str(row.number_))\n        form.add_button(str_, URL(SUB_EDITION_PROFILE_PAGE, vars=dict(ed=str(edId), subed=str(row.id))))\n    if isEditionWithThisIdExists(edId):\n        form.add_button(\'Add sub edition\', URL(SUB_EDITION_PROFILE_PAGE, vars=dict(ed=str(edId), subed=\'\')))\n    ## -----\n    \'\'\'\n\ndef getNetRatingOfEditionAsTR(edId):\n    return TR(TD(LABEL(\'Net Rating\'), _class="w2p_fl"), TD(XML(\'<i>\'+str(getEditionRating(edId))+\'</i>\'), _class="w2p_fw"))\n\ndef getNonEditableEditionProfile(edId, prodId):\n    update = db.edition(edId)\n    form = SQLFORM(db.edition, update, showid=False, readonly=True, buttons=[], upload=URL(r=request,f=\'download\'))\n    return form\n\ndef getNonEditableEditionManager(prodId):\n    allEditions = getEditionsWithThisProductId(prodId)\n    allEditonForms = []\n    for ed in allEditions:\n        allEditonForms.append(getNonEditableEditionProfile(ed.id, prodId))\n    return allEditonForms\n\n\n\ndef getLinkToEditionPageAsTR(edId, prodId):\n    return TR(TD(LABEL(\'URL\'), _class="w2p_fl"), TD(A(XML(\'url\'), _href=URL(EDITION_PROFILE_PAGE,  vars=dict(ed=str(edId), prod=str(prodId)))), _class="w2p_fw"))\n\ndef getEditableEditionForm(edId, prodId):\n    update = db.edition(edId)\n    submitBtnStr = \'Apply Changes\'\n    if not update:\n        db.edition.product_ref.default = prodId\n        submitBtnStr = \'Submit\'\n    form = SQLFORM(db.edition, update, deletable=True, showid=False, submit_button=submitBtnStr, upload=URL(r=request,f=\'download\'))\n    form[0].insert(-1,getLinkToEditionPageAsTR(edId, prodId))\n    form[0].insert(-1,getNetRatingOfEditionAsTR(prodId))\n    if form.accepts(request, session):\n        print \'submitted\'\n        response.flash="Submitted"\n    return form\n\ndef getButtonToAddEditon(prodId):\n    addForm = getEditableEditionForm(-1, prodId)\n    form = SQLFORM.factory(submit_button=\'Add Edition!\', table_name=\'edition_add\')\n    if form.accepts(request, session):\n        return addForm\n    return form\n\n\ndef editionRatingProcessing(form):\n    if (not session.auth) or auth.user.user_type==\'b\':\n       form.errors.your_rating = \'Only registered users are allowed to rate\'\n\ndef getNonEditableEditionForm(edId, prodId):\n    update = db.edition(edId)\n    form = SQLFORM(db.edition, update, buttons=[], showid=False, readonly=True, upload=URL(r=request,f=\'download\'))\n    form[0].insert(-1,getLinkToEditionPageAsTR(edId, prodId))\n    form[0].insert(-1,getNetRatingOfEditionAsTR(edId))\n    rateForm = SQLFORM.factory(Field(\'your_rating\', requires=[IS_INT_IN_RANGE(1,MAX_RATING)], type=\'integer\', default=getEditionRatingByThisUser(edId)), table_name=(\'edition_\'+str(edId)))\n    if rateForm.accepts(request, session, onvalidation=editionRatingProcessing):\n        insertEditionRating(edId, rateForm.vars.your_rating)\n        redirect(URL(args=request.args, vars=request.get_vars, host=True))\n    form.append(rateForm)\n    return form\n\ndef getAllEditonForms(prodId):\n    rows = getEditionsWithThisProductId(prodId)\n    if rows == -1:\n        return []\n    formList = []\n    check = isThisIsTheProductAdmin(prodId, auth.user_id)\n    for row in rows:\n        if check:\n            formList.append(getEditableEditionForm(row.id, prodId))\n        else:\n            formList.append(getNonEditableEditionForm(row.id, prodId))\n    return formList\n\ndef getAuthBasedButtonToAddEdition(prodId):\n    if not isThisIsTheProductAdmin(prodId, auth.user_id):\n        return SQLFORM.factory(buttons=[], table_name=\'edition_null\')\n    else:\n        return getButtonToAddEditon(prodId)\n\ndef getAuthBasedAllEditonForm(prodId):\n    form = getAuthBasedButtonToAddEdition(prodId)\n    allForms = getAllEditonForms(prodId)\n    allForms.append(form)\n    return allForms\n\ndef getEditionUsersRated(edId):\n    rows = selectEdition(edId)\n    if rows:\n        return rows[0].users_rated\n\ndef updateEditionUsersRatedList(edId, usersRatedList):\n    rows = selectEdition(edId)\n    if rows:\n        db(db.edition.id == edId).update(users_rated=usersRatedList)\n\ndef getEditionUsersRating(edId):\n    rows = selectEdition(edId)\n    if rows:\n        return rows[0].users_rating\n\ndef updateEditionUsersRatingList(edId, usersRatingList):\n    rows = selectEdition(edId)\n    if rows:\n        db(db.edition.id == edId).update(users_rating=usersRatingList)\n\ndef insertEditionRating(edId, score):\n    usersRatedList = getEditionUsersRated(edId)\n    usersRatingList = getEditionUsersRating(edId)\n    if not usersRatedList:\n        usersRatedList=[auth.user_id]\n        usersRatingList=[score]\n        updateEditionUsersRatedList(edId, usersRatedList)\n        updateEditionUsersRatingList(edId, usersRatingList)\n\n    if auth.user_id in usersRatedList:\n        ind = usersRatedList.index(auth.user_id)\n        usersRatingList[ind] = score\n        updateEditionUsersRatingList(edId, usersRatingList)\n    else:\n        usersRatedList.append(auth.user_id)\n        usersRatingList.append(score)\n        updateEditionUsersRatedList(edId, usersRatedList)\n        updateEditionUsersRatingList(edId, usersRatingList)\n\ndef getEditionRating(edId):\n    usersRatingList = getEditionUsersRating(edId)\n    if not usersRatingList:\n        return 0\n    return (1.0*sum(usersRatingList))/len(usersRatingList)\n\ndef getEditionRatingByThisUser(edId):\n    usersRatedList = getEditionUsersRated(edId)\n    score = 0\n    if (not session.auth) or (not usersRatedList):\n        return 0\n    if auth.user_id in usersRatedList:\n        usersRatingList = getEditionUsersRating(edId)\n        ind = usersRatedList.index(auth.user_id)\n        score = usersRatingList[ind]\n    return score\n\n\n\'\'\'\nEdition Functions\nEnd\n\'\'\'\n\n\'\'\'\nSub Edition Functions\nStart\n\'\'\'\ndef insertSubEdition(prodId, edId, name_, number_, dor, desc, picName, picBlob):\n    return db.sub_edition.insert(product_ref=prodId, edition_ref=edId, name=name_, number=number_, date_of_release=dor, description=desc, display_picture_name=picName, display_picture_blob=picBlob)\n\ndef initSubEdition(prodId, edId):\n    return db.sub_edition.insert(product_ref=prodId, edition_ref=edId)\n\ndef isSubEditionWithThisIdExists(subEdId):\n    if not db(db.sub_edition.id == subEdId).select():\n        return False\n    else:\n        return True\n\ndef selectSubEdition(subEdId):\n    return db(db.sub_edition.id == subEdId).select()\n\ndef getSubEditionEditionId(subEdId):\n    rows = selectSubEdition(subEdId)\n    if rows:\n        return rows[0].edition_ref\n\ndef updateSubEditionEditionId(subEdId, edId):\n    rows = selectSubEdition(subEdId)\n    if rows:\n        db(db.sub_edition.id == subEdId).update(edition_ref=edId)\n\ndef getSubEditionProductId(subEdId):\n    rows = selectSubEdition(subEdId)\n    if rows:\n        return rows[0].product_ref\n\ndef updateSubEditionProductId(subEdId, prodId):\n    rows = selectSubEdition(subEdId)\n    if rows:\n        db(db.sub_edition.id == subEdId).update(product_ref=prodId)\n\ndef getSubEditionName(subEdId):\n    rows = selectSubEdition(subEdId)\n    if rows:\n        return rows[0].name\n\ndef updateSubEditionName(subEdId, name_):\n    rows = selectSubEdition(subEdId)\n    if rows:\n        db(db.sub_edition.id == subEdId).update(name=name_)\n\ndef getSubEditionNumber(subEdId):\n    rows = selectSubEdition(subEdId)\n    if rows:\n        return rows[0].number_\n\ndef updateSubEditionNumber(subEdId, num):\n    rows = selectSubEdition(subEdId)\n    if rows:\n        db(db.sub_edition.id == subEdId).update(number_=num)\n\ndef getSubEditionDOR(subEdId):\n    rows = selectSubEdition(subEdId)\n    if rows:\n        return rows[0].date_of_release\n\ndef updateSubEditionDOR(subEdId, dor):\n    rows = selectSubEdition(subEdId)\n    if rows:\n        db(db.sub_edition.id == subEdId).update(date_of_release=dor)\n\ndef getSubEditionDesc(subEdId):\n    rows = selectSubEdition(subEdId)\n    if rows:\n        return rows[0].description\n\ndef updateSubEditionDesc(subEdId, desc):\n    rows = selectSubEdition(subEdId)\n    if rows:\n        db(db.sub_edition.id == subEdId).update(description=desc)\n\ndef getSubEditionPicName(subEdId):\n    rows = selectSubEdition(subEdId)\n    if rows:\n        return rows[0].display_picture_name\n\ndef updateSubEditionPicName(subEdId, name_):\n    rows = selectSubEdition(subEdId)\n    if rows:\n        db(db.sub_edition.id == subEdId).update(display_picture_name=name_)\n\ndef getSubEditionPicBlob(subEdId):\n    rows = selectSubEdition(subEdId)\n    if rows:\n        return rows[0].display_picture_blob\n\ndef updateSubEditionPicBlob(subEdId, picBlob):\n    rows = selectSubEdition(subEdId)\n    if rows:\n        db(db.sub_edition.id == subEdId).update(display_picture_blob=blob)\n\n## Returns list of sub editions if exists else -1\ndef getSubEditionsWithThisEditionId(edId):\n    rows = db(db.sub_edition.edition_ref == edId).select()\n    if(not rows):\n        return -1\n    else:\n        return rows\n\ndef getSubEditionProfile(contribId, edId, prodId):\n    update = db.contributor(contribId)\n    if not update:\n        db.sub_edition.product_ref.default = prodId\n        db.sub_edition.edition_ref.default = edId\n\n    form = SQLFORM(db.sub_edition, update, deletable=True, showid=False, submit_button=\'Apply Changes\', upload=URL(r=request,f=\'download\'))\n    \n    form.add_button(\'Back\', URL(EDITION_PROFILE_PAGE,  vars=dict(ed=str(edId))))\n\n    ## for videos\n    \'\'\'\n    rows = db(db.sub_edition.product_ref == edId).select()\n    for row in rows:\n        str_=(\'Edit Sub Edition #\' + str(row.number_))\n        form.add_button(str_, URL(SUB_EDITION_PROFILE_PAGE, vars=dict(ed=str(edId), subed=str(row.id))))\n    if isEditionWithThisIdExists(edId):\n        form.add_button(\'Add sub edition\', URL(SUB_EDITION_PROFILE_PAGE, vars=dict(ed=str(edId), subed=\'\')))\n    \'\'\'\n    ## -----\n    if form.accepts(request, session):\n        if form.deleted:\n            redirect(URL(EDITION_PROFILE_PAGE, vars=dict(ed=str(edId))))\n        else:\n            redirect(URL(SUB_EDITION_PROFILE_PAGE,  vars=dict(subed=str(form.vars.id),ed=str(edId))))\n    return form\n\n\ndef getLinkToSubEditionPageAsTR(subEdId, edId):\n    return TR(TD(LABEL(\'URL\'), _class="w2p_fl"), TD(A(XML(\'url\'), _href=URL(SUB_EDITION_PROFILE_PAGE, vars=dict(subed=str(subEdId), ed=str(edId))), _class="w2p_fw")))\n\ndef getEditableSubEditionForm(subEdId, edId):\n    update = db.sub_edition(subEdId)\n    submitBtnStr = \'Apply Changes\'\n    if not update:\n        db.sub_edition.edition_ref.default = edId\n        submitBtnStr = \'Submit\'\n    form = SQLFORM(db.sub_edition, update, deletable=True, showid=False, submit_button=submitBtnStr, upload=URL(r=request,f=\'download\'))\n\n    form[0].insert(-1,getLinkToSubEditionPageAsTR(subEdId, edId))\n    form[0].insert(-1,getNetRatingOfSubEditionAsTR(subEdId))\n    if form.accepts(request, session):\n        response.flash="Submitted"\n    return form\n\ndef getButtonToAddSubEditon(edId):\n    addForm = getEditableSubEditionForm(-1, edId)\n    form = SQLFORM.factory(submit_button=\'Add Sub-Edition!\', table_name=\'sub_edition_add\')\n    if form.accepts(request, session):\n        return addForm\n    return form\n\ndef getNonEditableSubEditionForm(subEdId, edId):\n    update = db.sub_edition(subEdId)\n    form = SQLFORM(db.sub_edition, update, buttons=[], showid=False, readonly=True, upload=URL(r=request,f=\'download\'))\n    form[0].insert(-1,getLinkToSubEditionPageAsTR(subEdId, edId))\n\n    form[0].insert(-1,getNetRatingOfSubEditionAsTR(subEdId))\n    rateForm = SQLFORM.factory(Field(\'your_rating\', requires=[IS_INT_IN_RANGE(1,MAX_RATING)], type=\'integer\', default=getSubEditionRatingByThisUser(subEdId)), table_name=(\'sub_edition_\'+str(edId)))\n    if rateForm.accepts(request, session, onvalidation=subEditionRatingProcessing):\n        insertSubEditionRating(subEdId, rateForm.vars.your_rating)\n        redirect(URL(args=request.args, vars=request.get_vars, host=True))\n    form.append(rateForm)\n\n    return form\n\ndef getAllSubEditonForms(edId):\n    rows = getSubEditionsWithThisEditionId(edId)\n    if rows == -1:\n        return []\n    formList = []\n    check = isThisTheEditionAdmin(edId, auth.user_id)\n    for row in rows:\n        if check:\n            formList.append(getEditableSubEditionForm(row.id, edId))\n        else:\n            formList.append(getNonEditableSubEditionForm(row.id, edId))\n    return formList\n\ndef getAuthBasedButtonToAddSubEdition(edId):\n    if not isThisTheEditionAdmin(edId, auth.user_id):\n        return SQLFORM.factory(buttons=[], table_name=\'sub_edition_null\')\n    else:\n        return getButtonToAddSubEditon(edId)\n\ndef getAuthBasedAllSubEditonForm(prodId):\n    form = getAuthBasedButtonToAddSubEdition(prodId)\n    allForms = getAllSubEditonForms(prodId)\n    allForms.append(form)\n    return allForms\n\ndef getAuthBasedSubEditionForm(subEdId, edId):\n    if isThisTheEditionAdmin(edId, auth.user_id):\n        return getEditableSubEditionForm(subEdId, edId)\n    else:\n        return getNonEditableSubEditionForm(subEdId, edId)\n\n\n\ndef getNetRatingOfSubEditionAsTR(subEdId):\n    return TR(TD(LABEL(\'Net Rating\'), _class="w2p_fl"), TD(XML(\'<i>\'+str(getSubEditionRating(subEdId))+\'</i>\'), _class="w2p_fw"))\n\n\ndef subEditionRatingProcessing(form):\n    if (not session.auth) or auth.user.user_type==\'b\':\n       form.errors.your_rating = \'Only registered users are allowed to rate\'\n\ndef getSubEditionUsersRated(subEdId):\n    rows = selectSubEdition(subEdId)\n    if rows:\n        return rows[0].users_rated\n\ndef updateSubEditionUsersRatedList(subEdId, usersRatedList):\n    rows = selectSubEdition(subEdId)\n    if rows:\n        db(db.sub_edition.id == subEdId).update(users_rated=usersRatedList)\n\ndef getSubEditionUsersRating(subEdId):\n    rows = selectSubEdition(subEdId)\n    if rows:\n        return rows[0].users_rating\n\ndef updateSubEditionUsersRatingList(subEdId, usersRatingList):\n    rows = selectSubEdition(subEdId)\n    if rows:\n        db(db.sub_edition.id == subEdId).update(users_rating=usersRatingList)\n\ndef insertSubEditionRating(subEdId, score):\n    usersRatedList = getSubEditionUsersRated(subEdId)\n    usersRatingList = getSubEditionUsersRating(subEdId)\n    if not usersRatedList:\n        usersRatedList=[auth.user_id]\n        usersRatingList=[score]\n        updateSubEditionUsersRatedList(subEdId, usersRatedList)\n        updateSubEditionUsersRatingList(subEdId, usersRatingList)\n\n    if auth.user_id in usersRatedList:\n        ind = usersRatedList.index(auth.user_id)\n        usersRatingList[ind] = score\n        updateSubEditionUsersRatingList(subEdId, usersRatingList)\n    else:\n        usersRatedList.append(auth.user_id)\n        usersRatingList.append(score)\n        updateSubEditionUsersRatedList(subEdId, usersRatedList)\n        updateSubEditionUsersRatingList(subEdId, usersRatingList)\n\ndef getSubEditionRating(subEdId):\n    usersRatingList = getSubEditionUsersRating(subEdId)\n    if not usersRatingList:\n        return 0\n    return (1.0*sum(usersRatingList))/len(usersRatingList)\n\ndef getSubEditionRatingByThisUser(subEdId):\n    usersRatedList = getSubEditionUsersRated(subEdId)\n    score = 0\n    if (not session.auth) or (not usersRatedList):\n        return 0\n    if auth.user_id in usersRatedList:\n        usersRatingList = getSubEditionUsersRating(subEdId)\n        ind = usersRatedList.index(auth.user_id)\n        score = usersRatingList[ind]\n    return score\n\n\n\'\'\'\nSub Edition Functions\nEnd\n\'\'\'\n\n\'\'\'\nContributor Functions\nStart\n\'\'\'\ndef insertContributor(prodId, name_1, name_2, role_, url_, picName, picBlob):\n    return db.contributor.insert(product_ref=prodId, real_name=name_1, character_name=name_2, role=role_, url=url_, display_picture_name=picName, display_picture_blob=picBlob)\n\ndef initContributor(prodId):\n    return db.contributor.insert(product_ref=prodId)\n\ndef isContributorWithThisIdExists(contribId):\n    if not db(db.contributor.id == contribId).select():\n        return False\n    else:\n        return True\n\ndef selectContributor(contribId):\n    return db(db.contributor.id == contribId).select()\n\ndef getContributorProductId(contribId):\n    rows = selectContributor(contribId)\n    if rows:\n        return rows[0].product_ref\n\ndef updateContributorProductId(contribId, prodId):\n    rows = selectContributor(contribId)\n    if rows:\n        db(db.contributor.id == contribId).update(product_ref=prodId)\n\ndef getContributorRealName(contribId):\n    rows = selectContributor(contribId)\n    if rows:\n        return rows[0].real_name\n\ndef updateContributorRealName(contribId, name_):\n    rows = selectContributor(contribId)\n    if rows:\n        db(db.contributor.id == contribId).update(real_name=name_)\n\ndef getContributorCharacterName(contribId):\n    rows = selectContributor(contribId)\n    if rows:\n        return rows[0].character_name\n\ndef updateContributorCharacterName(contribId, name_):\n    rows = selectContributor(contribId)\n    if rows:\n        db(db.contributor.id == contribId).update(character_name=name_)\n\ndef getContributorRole(contribId):\n    rows = selectContributor(contribId)\n    if rows:\n        return rows[0].role\n\ndef updateContributorRole(contribId, role_):\n    rows = selectContributor(contribId)\n    if rows:\n        db(db.contributor.id == contribId).update(role=role_)\n\n\ndef getContributorURL(contribId):\n    rows = selectContributor(contribId)\n    if rows:\n        return rows[0].url\n\ndef updateContributorURL(contribId, url_):\n    rows = selectContributor(contribId)\n    if rows:\n        db(db.contributor.id == contribId).update(url=url_)\n\ndef getContributorPicName(contribId):\n    rows = selectContributor(contribId)\n    if rows:\n        return rows[0].display_picture_name\n\ndef updateContributorPicName(contribId, name_):\n    rows = selectContributor(contribId)\n    if rows:\n        db(db.contributor.id == contribId).update(display_picture_name=name_)\n\ndef getContributorPicBlob(contribId):\n    rows = selectContributor(contribId)\n    if rows:\n        return rows[0].display_picture_blob\n\ndef updateContributorPicBlob(contribId, picBlob):\n    rows = selectContributor(contribId)\n    if rows:\n        db(db.contributor.id == contribId).update(display_picture_blob=blob)\n\n## Returns list of sub editions if exists else -1\ndef getContributorsWithThisProductId(contribId):\n    rows = db(db.contributor.product_ref == contribId).select()\n    if(not rows):\n        return -1\n    else:\n        return rows\n\ndef getContributorManager(prodId):\n    form = SQLFORM.factory(submit_button=\'Add Contributor\', table_name=\'contributor_add\')\n    \n    form.add_button(\'Back\', URL(INDEX_PAGE))\n    rows = db(db.contributor.product_ref == prodId).select()\n    \n    for row in rows:\n        str_=(\'Edit Contributor Profile: \' + str(row.real_name))\n        form.add_button(str_, URL(CONTRIBUTOR_PROFILE_PAGE, vars=dict(contrib=str(row.id))))\n    \n    if form.accepts(request, session):\n        redirect(URL(CONTRIBUTOR_PROFILE_PAGE, vars=dict(contrib=\'\')))\n    return form\n\ndef getContributorProfile(contribId, prodId):\n    update = db.contributor(contribId)\n    if not update:\n        db.contributor.product_ref.default = prodId\n    \n    form = SQLFORM(db.contributor, update, deletable=True, showid=False, submit_button=\'Apply Changes\', upload=URL(r=request,f=\'download\'))\n    \n    form.add_button(\'Back\', URL(CONTRIBUTOR_MANAGER_PAGE))\n    \n    if form.accepts(request, session):\n        if form.deleted:\n            redirect(URL(CONTRIBUTOR_MANAGER_PAGE))\n        else:\n            redirect(URL(CONTRIBUTOR_PROFILE_PAGE,  vars=dict(contrib=str(form.vars.id))))\n    return form\n\n\ndef getContributorsWithThisProductId(prodId):\n    rows = db(db.contributor.product_ref == prodId).select()\n    if(not rows):\n        return -1\n    else:\n        return rows\n\ndef getAuthBasedContributorForm(contribId, prodId):\n    if isThisIsTheProductAdmin(prodId, auth.user_id):\n        return getEditableContributorForm(contribId, prodId)\n    else:\n        return getNonEditableContributorForm(contribId, prodId)\n\ndef getEditableContributorForm(contribId, prodId):\n    update = db.contributor(contribId)\n    submitBtnStr = \'Apply Changes\'\n    if not update:\n        db.contributor.product_ref.default = prodId\n        submitBtnStr = \'Submit\'\n    form = SQLFORM(db.contributor, update, deletable=True, showid=False, submit_button=submitBtnStr, upload=URL(r=request,f=\'download\'))\n    if form.accepts(request, session):\n        response.flash="Submitted"\n    return form\n\ndef getButtonToAddContributor(prodId):\n    addForm = getEditableContributorForm(-1, prodId)\n    form = SQLFORM.factory(submit_button=\'Add Contibutor!\', table_name=\'contrib_add\')\n    if form.accepts(request, session):\n        return addForm\n    return form\n\ndef getNonEditableContributorForm(contribId, prodId):\n    update = db.contributor(contribId)\n    form = SQLFORM(db.contributor, update, buttons=[], showid=False, readonly=True, upload=URL(r=request,f=\'download\'))\n    return form\n\ndef getAllContributorForms(prodId):\n    rows = getContributorsWithThisProductId(prodId)\n    if rows == -1:\n        return []\n    formList = []\n    check = isThisIsTheProductAdmin(prodId, auth.user_id)\n    for row in rows:\n        if check:\n            formList.append(getEditableContributorForm(row.id, prodId))\n        else:\n            formList.append(getNonEditableContributorForm(row.id, prodId))\n    return formList\n\ndef getAuthBasedButtonToAddContributor(prodId):\n    if not isThisIsTheProductAdmin(prodId, auth.user_id):\n        return SQLFORM.factory(buttons=[], table_name=\'contrib_null\')\n    else:\n        return getButtonToAddContributor(prodId)\n\ndef getAuthBasedAllContributorForm(prodId):\n    form = getAuthBasedButtonToAddContributor(prodId)\n    allForms = getAllContributorForms(prodId)\n    allForms.append(form)\n    return allForms\n\n\'\'\'\nContributor Functions\nEnd\n\'\'\'\n\n\'\'\'\nReview Functions\nStart\n\'\'\'\ndef insertReview(type_, prodId, edId, subEdId, revId, title_, desc):\n    db.review.insert(for_type=type_, product_ref=prodId, edition_ref=edId, sub_edition_ref=subEdId, review_ref=revId, title=title_, description=desc)\n\ndef initReview(type_, typeId):\n    if type_ == \'product\':\n        return db.review.insert(for_type=type_, product_ref=typeId)\n    elif type_ == \'edition\':\n        return db.review.insert(for_type=type_, edition_ref=typeId)\n    elif type_ == \'sub_edition\':\n        return db.review.insert(for_type=type_, sub_edition_ref=typeId)\n    elif type_ == \'reply\':\n        return db.review.insert(for_type=type_, review_ref=typeId)\n    return -1\n\ndef selectReview(revId):\n    return db(db.review.id == revId).select()\n\ndef setReviewAnalyzed(revId):\n    rows = selectReview(revId)\n    if rows:\n        db(db.review.id == revId).update(analyzed=True)\n\ndef getNotAnalyzedReviewsOfProduct(prodId):\n    eds = getEditionsWithThisProductId(prodId)\n    if eds:\n        edIdList = [r.id for r in eds]\n        subedIdList = []\n        for r in edIdList:\n            subeds_ = getSubEditionsWithThisEditionId(r)\n            if subeds_:\n                subeds = [t.id for t in subeds_]\n                subedIdList += subeds\n    rows = db((db.review.product_ref == prodId or db.review.edition_ref in edIdList or db.review.sub_edition_ref in subedIdList) and db.review.analyzed == False).select()\n    if rows:\n        revIdList = [r.id for r in rows]\n        return revIdList\n\n\ndef isReviewWrittenByThisUser(revId):\n    rows = selectReview(revId)\n    if rows:\n        if rows[0].user_ref == auth.user_id:\n            return True\n        else:\n            return False\n    else:\n        return True ## TRIVIALLY TRUE BECAUSE REVIEW DOES NOT EXIST\n\ndef updateReviewType(revId, type_):\n    rows = selectReview(revId)\n    if rows and type_ in [\'product\', \'sub_edition\', \'edition\', \'reply\']:\n        db(db.review.id == revId).update(for_type = type_)\n\ndef updateReviewProductRef(revId, prodId):\n    rows = selectReview(revId)\n    if rows:\n        db(db.review.id == revId).update(product_ref=prodId)\n\ndef updateReviewEditionRef(revId, edId):\n    rows = selectReview(revId)\n    if rows:\n        db(db.review.id == revId).update(edition_ref=edId)\n\ndef updateReviewSubEditionRef(revId, subEdId):\n    rows = selectReview(revId)\n    if rows:\n        db(db.review.id == revId).update(sub_edition_ref=subEdId)\n\ndef updateReviewReplyRef(revId, repId):\n    rows = selectReview(revId)\n    if rows:\n        db(db.review.id == revId).update(review_ref=repId)\n\ndef deleteReview(revId):\n    rows = selectReview(revId)\n    if rows:\n        db(db.review.id == revId).delete()\n\ndef updateReviewTypeNTypeId(revId, type_, typeId):\n    rows = selectReview(revId)\n    if rows:\n        updateReviewType(revId, type_)\n        if(type_ == \'product\'):\n            updateReviewProductRef(revId, typeId)\n        elif(type_ == \'edition\'):\n            updateReviewEditionRef(revId, typeId)\n        elif(type_ == \'sub_edition\'):\n            updateReviewSubEditionRef(revId, typeId)\n        elif(type_ == \'reply\'):\n            updateReviewReplyRef(revId, typeId)\n\ndef getReviewUserId(revId):\n    rows = selectReview(revId)\n    if rows:\n        return rows[0].user_ref\n    else:\n        return auth.user_id\n\ndef getReviewUserFirstNameAsTR(userId):\n    return TR(TD(LABEL(\'By Firstname: \'), _class="w2p_fl"), TD(str(getAuthUserFirstName(userId)), _class="w2p_fw"))\n\ndef getReviewUserUserNameAsTR(userId):\n    return TR(TD(LABEL(\'By Username: \'), _class="w2p_fl"), TD(str(getAuthUserUserName(userId)),  _class="w2p_fw"))\n\ndef getEditableReviewForm(revId, type_, typeId):\n    isNewReview = False\n    update = db.review(revId)\n    submitBtnStr = \'Apply Changes\'\n    if not update:\n        isNewReview = True\n        if type_ in [\'product\', \'sub_edition\', \'edition\', \'reply\']:\n            db.review.for_type.default = type_\n        else:\n            return -1\n        if(type_ == \'product\'):\n            db.review.product_ref.default = typeId\n        elif(type_ == \'edition\'):\n            db.review.edition_ref.default = typeId\n        elif(type_ == \'sub_edition\'):\n            db.review.sub_edition_ref.default = typeId\n        elif(type_ == \'reply\'):\n            db.review.reply_ref.default = typeId\n        submitBtnStr = \'Submit\'\n\n    userId = getReviewUserId(revId)\n\n    form = SQLFORM(db.review, update, submit_button=submitBtnStr, showid=False, deletable=True, upload=URL(r=request,f=\'download\'))\n    form[0].insert(-1,getNetUpRatingOfReviewAsTR(revId))\n    form[0].insert(-1,getNetDownRatingOfReviewAsTR(revId))\n    userName = getReviewUserFirstNameAsTR(userId)\n    form[0].insert(-1,userName)\n\n    userName = getReviewUserUserNameAsTR(userId)\n    form[0].insert(-1,userName)\n\n    if form.accepts(request, session):\n        response.flash = \'Submitted!\'\n        if isNewReview:\n            normScore1 = getSentimentScore(form.vars.description)\n            normScore2 = getSentimentScore(form.vars.title)\n            addToProductAspectsScore(normScore1)\n            addToProductAspectsScore(normScore2)\n            setReviewAnalyzed(form.vars.id)\n\n    return form\n\ndef getNonEditableReviewForm(revId):\n    update = db.review(revId)\n    form = SQLFORM(db.review, update, buttons=[], showid=False, readonly=True, upload=URL(r=request,f=\'download\'))\n\n\n    form[0].insert(-1,getNetUpRatingOfReviewAsTR(revId))\n    form[0].insert(-1,getNetDownRatingOfReviewAsTR(revId))\n\n    voteDecode = [\'neutral\', \'up\', \'down\']\n\n    rateForm = SQLFORM.factory(Field(\'your_vote\', requires=[IS_IN_SET([\'up\',\'neutral\',\'down\'])], default=voteDecode[getReviewRatingByThisUser(revId)], widget=SQLFORM.widgets.radio.widget), table_name=(\'review_\'+str(revId)))\n    if rateForm.accepts(request, session, onvalidation=reviewRatingProcessing):\n        vote = rateForm.vars.your_vote\n        if vote == \'up\':\n            vote = 1\n        elif vote == \'down\':\n            vote = -1\n        else:\n            vote = 0\n        insertReviewRating(revId, vote)\n        redirect(URL(args=request.args, vars=request.get_vars, host=True))\n    form.append(rateForm)\n\n    userId = getReviewUserId(revId)\n    userName = getReviewUserFirstNameAsTR(userId)\n    form[0].insert(-1,userName)\n\n    userName = getReviewUserUserNameAsTR(userId)\n    form[0].insert(-1,userName)\n\n    return form\n\ndef getButtonToAddReview(type_, typeId):\n    addForm = getEditableReviewForm(-1, type_, typeId)\n    form = SQLFORM.factory(submit_button=\'Write review!\', table_name=\'review_add\')\n    if form.accepts(request, session):\n        return addForm\n    return form\n\ndef getButtonToEditReview(revId, type_, typeId):\n    editForm = getEditableReviewForm(revId, type_, typeId)\n    form = SQLFORM.factory(submit_button=\'Edit review!\', table_name=\'review_add\')\n    if form.accepts(request, session):\n        return editForm\n    return form\n\ndef getButtonToDeleteReview(revId):\n    form = SQLFORM.factory(submit_button=\'Delete review!\', table_name=\'review_add\')\n    if form.accepts(request, session):\n        deleteReview(revId)\n    return form\n\ndef getTypeNTypeIdBasedReviews(type_, typeId):\n    if(type_ == \'product\'):\n        return db(db.review.for_type == \'product\' and db.review.product_ref == typeId).select()\n    elif(type_ == \'edition\'):\n        return db(db.review.for_type == \'edition\' and db.review.edition_ref == typeId).select()\n    elif(type_ == \'sub_edition\'):\n        return db(db.review.for_type == \'sub_edition\' and db.review.sub_edition_ref == typeId).select()\n    elif(type_ == \'reply\'):\n        return db(db.review.for_type == \'reply\' and db.review.reply_ref == typeId).select()\n\ndef getAllReviewForms(type_, typeId):\n    rows = getTypeNTypeIdBasedReviews(type_, typeId)\n    formList = []\n    for row in rows:\n        if isReviewWrittenByThisUser(row.id):\n            formList.append(getEditableReviewForm(row.id, type_, typeId))\n        else:\n            formList.append(getNonEditableReviewForm(row.id))\n    return formList\n\ndef getAuthBasedButtonToAddReview(type_, typeId):\n    if not session.auth or auth.user.user_type == \'b\':\n        return SQLFORM.factory(buttons=[], table_name=\'review_null\')\n    else:\n        return getButtonToAddReview(type_, typeId)\n\ndef getAuthBasedReviewForm(type_, typeId):\n    form = getAuthBasedButtonToAddReview(type_, typeId)\n    allForms = getAllReviewForms(type_, typeId)\n    allForms.append(form)\n    return allForms\n\ndef getNetUpRatingOfReviewAsTR(revId):\n    return TR(TD(LABEL(\'Net Up votes\'), _class="w2p_fl"), TD(XML(\'<i>\'+str(getReviewUpRating(revId))+\'</i>\'), _class="w2p_fw"))\n\ndef getNetDownRatingOfReviewAsTR(revId):\n    return TR(TD(LABEL(\'Net Down votes\'), _class="w2p_fl"), TD(XML(\'<i>\'+str(getReviewDownRating(revId))+\'</i>\'), _class="w2p_fw"))\n\n\ndef reviewRatingProcessing(form):\n    if (not session.auth) or auth.user.user_type==\'b\':\n       form.errors.your_vote = \'Only registered users are allowed to rate\'\n\ndef getReviewUsersRated(revId):\n    rows = selectReview(revId)\n    if rows:\n        return rows[0].users_rated\n\ndef updateReviewUsersRatedList(revId, usersRatedList):\n    rows = selectReview(revId)\n    if rows:\n        db(db.review.id == revId).update(users_rated=usersRatedList)\n\ndef getReviewUsersRating(revId):\n    rows = selectReview(revId)\n    if rows:\n        return rows[0].users_rating\n\ndef updateReviewUsersRatingList(revId, usersRatingList):\n    rows = selectReview(revId)\n    if rows:\n        db(db.review.id == revId).update(users_rating=usersRatingList)\n\ndef insertReviewRating(revId, score):\n    usersRatedList = getReviewUsersRated(revId)\n    usersRatingList = getReviewUsersRating(revId)\n    if not usersRatedList:\n        usersRatedList=[auth.user_id]\n        usersRatingList=[score]\n        updateReviewUsersRatedList(revId, usersRatedList)\n        updateReviewUsersRatingList(revId, usersRatingList)\n\n    if auth.user_id in usersRatedList:\n        ind = usersRatedList.index(auth.user_id)\n        usersRatingList[ind] = score\n        updateReviewUsersRatingList(revId, usersRatingList)\n    else:\n        usersRatedList.append(auth.user_id)\n        usersRatingList.append(score)\n        updateReviewUsersRatedList(revId, usersRatedList)\n        updateReviewUsersRatingList(revId, usersRatingList)\n\ndef getReviewUpRating(revId):\n    usersRatingList = getReviewUsersRating(revId)\n    if not usersRatingList:\n        return 0\n    usersRatingList = np.array(usersRatingList)\n    mask = (usersRatingList == 1).astype(int)\n    return (1.0*sum(mask))/len(usersRatingList)\n\ndef getReviewDownRating(revId):\n    usersRatingList = getReviewUsersRating(revId)\n    if not usersRatingList:\n        return 0\n    usersRatingList = np.array(usersRatingList)\n    mask = (usersRatingList == -1).astype(int)\n    return (1.0*sum(mask))/len(usersRatingList)\n\ndef getReviewRatingByThisUser(revId):\n    usersRatedList = getReviewUsersRated(revId)\n    score = 0\n    if (not session.auth) or (not usersRatedList):\n        return 0\n    if auth.user_id in usersRatedList:\n        usersRatingList = getReviewUsersRating(revId)\n        ind = usersRatedList.index(auth.user_id)\n        score = usersRatingList[ind]\n    return score\n\n\'\'\'\nReview Functions\nEnd\n\'\'\'\n\n\n\'\'\'\nNews Functions\nStart\n\'\'\'\ndef insertNews(prodId, title_, desc, url_, picName, picBlob):\n    return db.news.insert(product_ref=prodId, title=title, description=desc, url=url_, display_picture_name=picName, display_picture_blob=picBlob)\n\ndef initNews(prodId):\n    return db.news.insert(product_ref=prodId)\n\ndef isNewsWithThisIdExists(newsId):\n    if not db(db.news.id == newsId).select():\n        return False\n    else:\n        return True\n\ndef selectNews(newsId):\n    return db(db.news.id == newsId).select()\n\ndef getNewsProductId(newsId):\n    rows = selectNews(newsId)\n    if rows:\n        return rows[0].product_ref\n\ndef updateNewsProductId(newsId, prodId):\n    rows = selectNews(newsId)\n    if rows:\n        db(db.news.id == newsId).update(product_ref=prodId)\n\ndef getNewsTitle(newsId):\n    rows = selectNews(newsId)\n    if rows:\n        return rows[0].title\n\ndef updateNewsTitle(newsId, title_):\n    rows = selectNews(newsId)\n    if rows:\n        db(db.news.id == newsId).update(title=title_)\n\ndef getNewsDescription(newsId):\n    rows = selectNews(newsId)\n    if rows:\n        return rows[0].description\n\ndef updateNewsDescription(newsId, desc):\n    rows = selectNews(newsId)\n    if rows:\n        db(db.news.id == newsId).update(description=desc)\n\n\ndef getNewsURL(newsId):\n    rows = selectNews(newsId)\n    if rows:\n        return rows[0].url\n\ndef updateNewsURL(newsId, url_):\n    rows = selectNews(newsId)\n    if rows:\n        db(db.news.id == newsId).update(url=url_)\n\ndef getNewsPicName(newsId):\n    rows = selectNews(newsId)\n    if rows:\n        return rows[0].display_picture_name\n\ndef updateNewsPicName(newsId, name_):\n    rows = selectNews(newsId)\n    if rows:\n        db(db.news.id == newsId).update(display_picture_name=name_)\n\ndef getNewsPicBlob(newsId):\n    rows = selectNews(newsId)\n    if rows:\n        return rows[0].display_picture_blob\n\ndef updateNewsPicBlob(newsId, picBlob):\n    rows = selectNews(newsId)\n    if rows:\n        db(db.news.id == newsId).update(display_picture_blob=blob)\n\ndef getAllNewsWithThisProductId(prodId):\n    rows = db(db.news.product_ref == prodId).select()\n    if(not rows):\n        return -1\n    else:\n        return rows\n\ndef getAuthBasedNewsForm(newsId, prodId):\n    if isThisIsTheProductAdmin(prodId, auth.user_id):\n        return getEditableNewsForm(newsId, prodId)\n    else:\n        return getNonEditableNewsForm(newsId, prodId)\n\ndef getEditableNewsForm(newsId, prodId):\n    update = db.news(newsId)\n    submitBtnStr = \'Apply Changes\'\n    if not update:\n        db.news.product_ref.default = prodId\n        submitBtnStr = \'Submit\'\n    form = SQLFORM(db.news, update, deletable=True, showid=False, submit_button=submitBtnStr, upload=URL(r=request,f=\'download\'))\n    if form.accepts(request, session):\n        response.flash="Submitted"\n    return form\n\ndef getButtonToAddNews(prodId):\n    addForm = getEditableNewsForm(-1, prodId)\n    form = SQLFORM.factory(submit_button=\'Add News!\', table_name=\'news_add\')\n    if form.accepts(request, session):\n        return addForm\n    return form\n\ndef getNonEditableNewsForm(newsId, prodId):\n    update = db.news(newsId)\n    form = SQLFORM(db.news, update, buttons=[], showid=False, readonly=True, upload=URL(r=request,f=\'download\'))\n    return form\n\ndef getAllNewsForms(prodId):\n    rows = getAllNewsWithThisProductId(prodId)\n    if rows == -1:\n        return []\n    formList = []\n    check = isThisIsTheProductAdmin(prodId, auth.user_id)\n    for row in rows:\n        if check:\n            formList.append(getEditableNewsForm(row.id, prodId))\n        else:\n            formList.append(getNonEditableNewsForm(row.id, prodId))\n    return formList\n\ndef getAuthBasedButtonToAddNews(prodId):\n    if not isThisIsTheProductAdmin(prodId, auth.user_id):\n        return SQLFORM.factory(buttons=[], table_name=\'news_null\')\n    else:\n        return getButtonToAddNews(prodId)\n\ndef getAuthBasedAllNewsForm(prodId):\n    form = getAuthBasedButtonToAddNews(prodId)\n    allForms = getAllNewsForms(prodId)\n    allForms.append(form)\n    return allForms\n\'\'\'\nNews Functions\nEnd\n\'\'\'\n\n\'\'\'\nVideo Functions\nStart\n\'\'\'\n\ndef insertVideo(prodId, type_, edId, subEdId, name_, url_):\n    return db.video.insert(for_type=type_, product_ref=prodId, edition_ref=edId, sub_edition_ref=subEdId, url=url_, name=name_)\n\ndef initVideo(type_, typeId, url_):\n    if type_ == \'product\':\n        return db.video.insert(for_type=type_, product_ref=typeId, url=url_)\n    elif type_ == \'edition\':\n        return db.video.insert(for_type=type_, edition_ref=typeId, url=url_)\n    elif type_ == \'sub_edition\':\n        return db.video.insert(for_type=type_, sub_edition_ref=typeId, url=url_)\n    return -1\n\ndef isVideoWithThisIdExists(videoId):\n    if not db(db.video.id == videoId).select():\n        return False\n    else:\n        return True\n\ndef selectVideo(videoId):\n    return db(db.video.id == videoId).select()\n\ndef getVideoProductId(videoId):\n    rows = selectVideo(videoId)\n    if rows:\n        return rows[0].product_ref\n\ndef getVideoEditionId(videoId):\n    rows = selectVideo(videoId)\n    if rows:\n        return rows[0].edition_ref\n\ndef getVideoSubEditionId(videoId):\n    rows = selectVideo(videoId)\n    if rows:\n        return rows[0].sub_edition_ref\n\ndef getVideoName(videoId):\n    rows = selectVideo(videoId)\n    if rows:\n        return rows[0].name\n\ndef updateVideoName(videoId, name_):\n    rows = selectVideo(videoId)\n    if rows:\n        db(db.video.id == videoId).update(name=name_)\n\ndef getVideoURL(videoId):\n    rows = selectVideo(videoId)\n    if rows:\n        return rows[0].url\n\ndef updateVideoURL(videoId, url_):\n    rows = selectVideo(videoId)\n    if rows:\n        db(db.video.id == videoId).update(url=url_)\n\ndef getVideoForType(videoId):\n    rows = selectVideo(videoId)\n    if rows:\n        return rows[0].for_type\n\ndef isThisTheVideoAdmin(videoId):\n    finalId = -1\n    type_ = getVideoForType(videoId)\n    if type_ == \'product\':\n        finalId = getVideoProductId(videoId)\n    elif type_ == \'edition\':\n        finalId = getEditionProductId(getVideoEditionId(videoId))\n    elif type_ == \'sub_edition\':\n        finalId = getEditionProductId(getVideoEditionId(getVideoSubEditionId(videoId)))\n    return isThisIsTheProductAdmin(finalId, auth.user_id)\n\ndef isThisTheVideoAdminUtil(type_, typeId):\n    finalId = -1\n    if type_ == \'product\':\n        finalId = typeId\n    elif type_ == \'edition\':\n        finalId = getEditionProductId(typeId)\n    elif type_ == \'sub_edition\':\n        finalId = getSubEditionEditionId(typeId)\n        finalId = getEditionProductId(finalId)\n    return isThisIsTheProductAdmin(finalId, auth.user_id)\n\ndef getAuthBasedVideoForm(videoId):\n    if isThisTheVideoAdmin(videoId):\n        return getEditableVideoForm(videoId, type_, typeId)\n    else:\n        return getNonEditableVideoForm(videoId, type_, typeId)\n\ndef getEditableVideoForm(videoId, type_, typeId):\n    update = db.video(videoId)\n    submitBtnStr = \'Apply Changes\'\n    if not update:\n        if type_ in [\'product\', \'sub_edition\', \'edition\']:\n            db.video.for_type.default = type_\n        else:\n            return -1\n        if(type_ == \'product\'):\n            db.video.product_ref.default = typeId\n        elif(type_ == \'edition\'):\n            db.video.edition_ref.default = typeId\n        elif(type_ == \'sub_edition\'):\n            db.video.sub_edition_ref.default = typeId\n        submitBtnStr = \'Submit\'\n    form = SQLFORM(db.video, update, deletable=True, showid=False, submit_button=submitBtnStr, upload=URL(r=request,f=\'download\'))\n    if form.accepts(request, session):\n        response.flash="Submitted"\n    return form\n\ndef getButtonToAddVideo(type_, typeId):\n    addForm = getEditableVideoForm(-1, type_, typeId)\n    form = SQLFORM.factory(submit_button=\'Add Video!\', table_name=\'video_add\')\n    if form.accepts(request, session):\n        return addForm\n    return form\n\ndef getNonEditableVideoForm(videoId, type_, typeId):\n    update = db.video(videoId)\n    form = SQLFORM(db.video, update, buttons=[], showid=False, readonly=True, upload=URL(r=request,f=\'download\'))\n    return form\n\ndef getTypeNTypeIdBasedVideos(type_, typeId):\n    if(type_ == \'product\'):\n        return db(db.video.for_type == \'product\' and db.video.product_ref == typeId).select()\n    elif(type_ == \'edition\'):\n        return db(db.video.for_type == \'edition\' and db.video.edition_ref == typeId).select()\n    elif(type_ == \'sub_edition\'):\n        return db(db.video.for_type == \'sub_edition\' and db.video.sub_edition_ref == typeId).select()\n    elif(type_ == \'reply\'):\n        return db(db.video.for_type == \'reply\' and db.video.reply_ref == typeId).select()\n    return -1\n\ndef getAllVideoForms(type_, typeId):\n    rows = getTypeNTypeIdBasedVideos(type_, typeId)\n    if rows == -1:\n        return []\n    formList = []\n    if rows:\n        check = isThisTheVideoAdmin(rows[0].id)\n    for row in rows:\n        if check:\n            formList.append(getEditableVideoForm(row.id, type_, typeId))\n        else:\n            formList.append(getNonEditableVideoForm(row.id, type_, typeId))\n    return formList\n\ndef getAuthBasedButtonToAddVideo(type_, typeId):\n    if not isThisTheVideoAdminUtil(type_, typeId):\n        return SQLFORM.factory(buttons=[], table_name=\'video_null\')\n    else:\n        return getButtonToAddVideo(type_, typeId)\n\ndef getAuthBasedAllVideoForm(type_, typeId):\n    form = getAuthBasedButtonToAddVideo(type_, typeId)\n    allForms = getAllVideoForms(type_, typeId)\n    allForms.append(form)\n    return allForms\n\n\'\'\'\nVideo Functions\nEnd\n\'\'\'\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\'\'\'\nSentiment Analysis Code\nStart\n\'\'\'\n\nclass Splitter(object):\n\n    def __init__(self):\n        self.nltk_splitter = nltk.data.load(\'tokenizers/punkt/english.pickle\')\n        self.nltk_tokenizer = nltk.tokenize.TreebankWordTokenizer()\n\n    def split(self, text):\n        """\n        input format: a paragraph of text\n        output format: a list of lists of words.\n            e.g.: [[\'this\', \'is\', \'a\', \'sentence\'], [\'this\', \'is\', \'another\', \'one\']]\n        """\n        sentences = self.nltk_splitter.tokenize(text)\n        tokenized_sentences = [self.nltk_tokenizer.tokenize(sent) for sent in sentences]\n        return tokenized_sentences\n\n\nclass POSTagger(object):\n\n    def __init__(self):\n        pass\n        \n    def pos_tag(self, sentences):\n        """\n        input format: list of lists of words\n            e.g.: [[\'this\', \'is\', \'a\', \'sentence\'], [\'this\', \'is\', \'another\', \'one\']]\n        output format: list of lists of tagged tokens. Each tagged tokens has a\n        form, a lemma, and a list of tags\n            e.g: [[(\'this\', \'this\', [\'DT\']), (\'is\', \'be\', [\'VB\']), (\'a\', \'a\', [\'DT\']), (\'sentence\', \'sentence\', [\'NN\'])],\n                    [(\'this\', \'this\', [\'DT\']), (\'is\', \'be\', [\'VB\']), (\'another\', \'another\', [\'DT\']), (\'one\', \'one\', [\'CARD\'])]]\n        """\n\n        pos = [nltk.pos_tag(sentence) for sentence in sentences]\n        #adapt format\n        pos = [[(word, word, [postag]) for (word, postag) in sentence] for sentence in pos]\n        return pos\n\nclass DictionaryTagger(object):\n\n    def __init__(self, dictionary_paths):\n        files = [open(path, \'r\') for path in dictionary_paths]\n        dictionaries = [yaml.load(dict_file) for dict_file in files]\n        map(lambda x: x.close(), files)\n        self.dictionary = {}\n        self.max_key_size = 0\n        for curr_dict in dictionaries:\n            for key in curr_dict:\n                if key in self.dictionary:\n                    self.dictionary[key].extend(curr_dict[key])\n                else:\n                    self.dictionary[key] = curr_dict[key]\n                    self.max_key_size = max(self.max_key_size, len(key))\n\n    def tag(self, postagged_sentences):\n        return [self.tag_sentence(sentence) for sentence in postagged_sentences]\n\n    def tag_sentence(self, sentence, tag_with_lemmas=False):\n        """\n        the result is only one tagging of all the possible ones.\n        The resulting tagging is determined by these two priority rules:\n            - longest matches have higher priority\n            - search is made from left to right\n        """\n        tag_sentence = []\n        N = len(sentence)\n        if self.max_key_size == 0:\n            self.max_key_size = N\n        i = 0\n        while (i < N):\n            j = min(i + self.max_key_size, N) #avoid overflow\n            tagged = False\n            while (j > i):\n                expression_form = \' \'.join([word[0] for word in sentence[i:j]]).lower()\n                expression_lemma = \' \'.join([word[1] for word in sentence[i:j]]).lower()\n                if tag_with_lemmas:\n                    literal = expression_lemma\n                else:\n                    literal = expression_form\n                if literal in self.dictionary:\n                    #self.logger.debug("found: %s" % literal)\n                    is_single_token = j - i == 1\n                    original_position = i\n                    i = j\n                    taggings = [tag for tag in self.dictionary[literal]]\n                    tagged_expression = (expression_form, expression_lemma, taggings)\n                    if is_single_token: #if the tagged literal is a single token, conserve its previous taggings:\n                        original_token_tagging = sentence[original_position][2]\n                        tagged_expression[2].extend(original_token_tagging)\n                    tag_sentence.append(tagged_expression)\n                    tagged = True\n                else:\n                    j = j - 1\n            if not tagged:\n                tag_sentence.append(sentence[i])\n                i += 1\n        return tag_sentence\n\ndef value_of(sentiment):\n    if sentiment == \'positive\': return 1\n    if sentiment == \'negative\': return -1\n    return 0\n\ndef sentence_score(sentence_tokens, previous_token, acum_score):    \n    if not sentence_tokens:\n        return acum_score\n    else:\n        current_token = sentence_tokens[0]\n        tags = current_token[2]\n        token_score = sum([value_of(tag) for tag in tags])\n        if previous_token is not None:\n            previous_tags = previous_token[2]\n            if \'inc\' in previous_tags:\n                token_score *= 2.0\n            elif \'dec\' in previous_tags:\n                token_score /= 2.0\n            elif \'inv\' in previous_tags:\n                token_score *= -1.0\n        return sentence_score(sentence_tokens[1:], current_token, acum_score + token_score)\n\ndef sentiment_score(review):\n    return sum([sentence_score(sentence, None, 0.0) for sentence in review])\n\naspects = [\'comedy\', \'action\']\n#splitter = Splitter()\n#postagger = POSTagger()\n#dicttagger = [DictionaryTagger([ (\'dicts/positive_\' + r + \'.yml\'), (\'dicts/negative_\' + r + \'.yml\'), \'dicts/inc.yml\', \'dicts/dec.yml\', \'dicts/inv.yml\']) for r in aspects]\n\ndef getSentimentScore(text):\n    #splitted_sentences = splitter.split(text)\n    #pos_tagged_sentences = postagger.pos_tag(splitted_sentences)\n    #dict_tagged_sentences_list = [dtagger.tag(pos_tagged_sentences) for dtagger in dicttagger]\n    #score = [sentiment_score(dict_tagged_sentences) for dict_tagged_sentences in dict_tagged_sentences_list]\n    normScoreList = [(1*5) for s in aspects]\n    print \'score\'\n    print normScoreList\n    return normScoreList\nresponse._vars=response._caller(product_index)\n'
+p7
+sS'snapshot'
+p8
+(dp9
+S'exception'
+p10
+(dp11
+S'__hash__'
+p12
+S"<method-wrapper '__hash__' of exceptions.TypeError object>"
+p13
+sS'__setattr__'
+p14
+S"<method-wrapper '__setattr__' of exceptions.TypeError object>"
+p15
+sS'__reduce_ex__'
+p16
+S'<built-in method __reduce_ex__ of exceptions.TypeError object>'
+p17
+sS'__getslice__'
+p18
+S"<method-wrapper '__getslice__' of exceptions.TypeError object>"
+p19
+sS'__getitem__'
+p20
+S"<method-wrapper '__getitem__' of exceptions.TypeError object>"
+p21
+sS'__setstate__'
+p22
+S'<built-in method __setstate__ of exceptions.TypeError object>'
+p23
+sS'args'
+p24
+S"('addToProductAspectsScore() takes exactly 2 arguments (1 given)',)"
+p25
+sS'__reduce__'
+p26
+S'<built-in method __reduce__ of exceptions.TypeError object>'
+p27
+sS'__str__'
+p28
+S"<method-wrapper '__str__' of exceptions.TypeError object>"
+p29
+sS'__format__'
+p30
+S'<built-in method __format__ of exceptions.TypeError object>'
+p31
+sS'__getattribute__'
+p32
+S"<method-wrapper '__getattribute__' of exceptions.TypeError object>"
+p33
+sS'__class__'
+p34
+S"<type 'exceptions.TypeError'>"
+p35
+sS'__unicode__'
+p36
+S'<built-in method __unicode__ of exceptions.TypeError object>'
+p37
+sS'__delattr__'
+p38
+S"<method-wrapper '__delattr__' of exceptions.TypeError object>"
+p39
+sS'__subclasshook__'
+p40
+S'<built-in method __subclasshook__ of type object>'
+p41
+sS'__repr__'
+p42
+S"<method-wrapper '__repr__' of exceptions.TypeError object>"
+p43
+sS'__dict__'
+p44
+S'{}'
+p45
+sS'__sizeof__'
+p46
+S'<built-in method __sizeof__ of exceptions.TypeError object>'
+p47
+sS'__doc__'
+p48
+S"'Inappropriate argument type.'"
+p49
+sS'__init__'
+p50
+S"<method-wrapper '__init__' of exceptions.TypeError object>"
+p51
+sS'__new__'
+p52
+S'<built-in method __new__ of type object>'
+p53
+ssS'evalue'
+p54
+S'addToProductAspectsScore() takes exactly 2 arguments (1 given)'
+p55
+sS'request'
+p56
+cgluon.html
+XML_unpickle
+p57
+(S's@h\x00\x00<div><table><tr><td style="font-weight:bold;vertical-align:top;">ajax</td><td style="vertical-align:top;">:</td><td><div>False</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">application</td><td style="vertical-align:top;">:</td><td><div>critico</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">args</td><td style="vertical-align:top;">:</td><td><div><table><tr><td><div>hello</div></td></tr></table></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">cid</td><td style="vertical-align:top;">:</td><td><div>None</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">client</td><td style="vertical-align:top;">:</td><td><div>127.0.0.1</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">controller</td><td style="vertical-align:top;">:</td><td><div>default</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">cookies</td><td style="vertical-align:top;">:</td><td><div><table><tr><td style="font-weight:bold;vertical-align:top;">session_id_admin</td><td style="vertical-align:top;">:</td><td><div>127.0.0.1-05ed102d-3ffa-437e-9a15-56a543746e13<table><tr><td style="font-weight:bold;vertical-align:top;">comment</td><td style="vertical-align:top;">:</td><td><div></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">domain</td><td style="vertical-align:top;">:</td><td><div></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">expires</td><td style="vertical-align:top;">:</td><td><div></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">httponly</td><td style="vertical-align:top;">:</td><td><div></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">max-age</td><td style="vertical-align:top;">:</td><td><div></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">path</td><td style="vertical-align:top;">:</td><td><div></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">secure</td><td style="vertical-align:top;">:</td><td><div></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">version</td><td style="vertical-align:top;">:</td><td><div></div></td></tr></table></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">session_id_critico</td><td style="vertical-align:top;">:</td><td><div>127.0.0.1-6207d672-0e88-4396-9de9-b4475a9b31e8<table><tr><td style="font-weight:bold;vertical-align:top;">comment</td><td style="vertical-align:top;">:</td><td><div></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">domain</td><td style="vertical-align:top;">:</td><td><div></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">expires</td><td style="vertical-align:top;">:</td><td><div></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">httponly</td><td style="vertical-align:top;">:</td><td><div></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">max-age</td><td style="vertical-align:top;">:</td><td><div></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">path</td><td style="vertical-align:top;">:</td><td><div></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">secure</td><td style="vertical-align:top;">:</td><td><div></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">version</td><td style="vertical-align:top;">:</td><td><div></div></td></tr></table></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">session_id_sample_app</td><td style="vertical-align:top;">:</td><td><div>127.0.0.1-0d057cb9-cdf5-4682-b07b-898dc068f898<table><tr><td style="font-weight:bold;vertical-align:top;">comment</td><td style="vertical-align:top;">:</td><td><div></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">domain</td><td style="vertical-align:top;">:</td><td><div></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">expires</td><td style="vertical-align:top;">:</td><td><div></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">httponly</td><td style="vertical-align:top;">:</td><td><div></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">max-age</td><td style="vertical-align:top;">:</td><td><div></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">path</td><td style="vertical-align:top;">:</td><td><div></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">secure</td><td style="vertical-align:top;">:</td><td><div></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">version</td><td style="vertical-align:top;">:</td><td><div></div></td></tr></table></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">session_id_soapcharts</td><td style="vertical-align:top;">:</td><td><div>127.0.0.1-9d21a5b9-a60d-4b30-8745-96479721b4e5<table><tr><td style="font-weight:bold;vertical-align:top;">comment</td><td style="vertical-align:top;">:</td><td><div></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">domain</td><td style="vertical-align:top;">:</td><td><div></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">expires</td><td style="vertical-align:top;">:</td><td><div></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">httponly</td><td style="vertical-align:top;">:</td><td><div></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">max-age</td><td style="vertical-align:top;">:</td><td><div></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">path</td><td style="vertical-align:top;">:</td><td><div></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">secure</td><td style="vertical-align:top;">:</td><td><div></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">version</td><td style="vertical-align:top;">:</td><td><div></div></td></tr></table></div></td></tr></table></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">env</td><td style="vertical-align:top;">:</td><td><div><table><tr><td style="font-weight:bold;vertical-align:top;">CONTENT_LENGTH</td><td style="vertical-align:top;">:</td><td><div>491</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">CONTENT_TYPE</td><td style="vertical-align:top;">:</td><td><div>multipart/form-data; boundary=----WebKitFormBoundaryMvnE1FynrBRAZDiy</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">HTTP_ACCEPT</td><td style="vertical-align:top;">:</td><td><div>text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">HTTP_ACCEPT_ENCODING</td><td style="vertical-align:top;">:</td><td><div>gzip, deflate</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">HTTP_ACCEPT_LANGUAGE</td><td style="vertical-align:top;">:</td><td><div>en-US,en;q=0.8</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">HTTP_CACHE_CONTROL</td><td style="vertical-align:top;">:</td><td><div>max-age=0</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">HTTP_CONNECTION</td><td style="vertical-align:top;">:</td><td><div>keep-alive</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">HTTP_CONTENT_LENGTH</td><td style="vertical-align:top;">:</td><td><div>491</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">HTTP_CONTENT_TYPE</td><td style="vertical-align:top;">:</td><td><div>multipart/form-data; boundary=----WebKitFormBoundaryMvnE1FynrBRAZDiy</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">HTTP_COOKIE</td><td style="vertical-align:top;">:</td><td><div>session_id_soapcharts=127.0.0.1-9d21a5b9-a60d-4b30-8745-96479721b4e5; session_id_sample_app=127.0.0.1-0d057cb9-cdf5-4682-b07b-898dc068f898; session_id_admin=127.0.0.1-05ed102d-3ffa-437e-9a15-56a543746e13; session_id_critico=127.0.0.1-6207d672-0e88-4396-9de9-b4475a9b31e8</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">HTTP_HOST</td><td style="vertical-align:top;">:</td><td><div>127.0.0.1:8000</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">HTTP_ORIGIN</td><td style="vertical-align:top;">:</td><td><div>http://127.0.0.1:8000</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">HTTP_REFERER</td><td style="vertical-align:top;">:</td><td><div>http://127.0.0.1:8000/critico/default/product_index/hello</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">HTTP_USER_AGENT</td><td style="vertical-align:top;">:</td><td><div>Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/40.0.2214.115 Safari/537.36</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">PATH_INFO</td><td style="vertical-align:top;">:</td><td><div>/critico/default/product_index/hello</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">QUERY_STRING</td><td style="vertical-align:top;">:</td><td><div></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">REMOTE_ADDR</td><td style="vertical-align:top;">:</td><td><div>127.0.0.1</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">REMOTE_PORT</td><td style="vertical-align:top;">:</td><td><div>49686</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">REQUEST_METHOD</td><td style="vertical-align:top;">:</td><td><div>POST</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">SCRIPT_NAME</td><td style="vertical-align:top;">:</td><td><div></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">SERVER_NAME</td><td style="vertical-align:top;">:</td><td><div>dhruv-Lenovo-Y50-70</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">SERVER_PORT</td><td style="vertical-align:top;">:</td><td><div>8000</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">SERVER_PROTOCOL</td><td style="vertical-align:top;">:</td><td><div>HTTP/1.1</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">SERVER_SOFTWARE</td><td style="vertical-align:top;">:</td><td><div>Rocket 1.2.6</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">app_folders</td><td style="vertical-align:top;">:</td><td><div>set([&#x27;/home/dhruv/web2py/applications/critico/&#x27;, &#x27;/home/dhruv/web2py/applications/admin/&#x27;])</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">applications_parent</td><td style="vertical-align:top;">:</td><td><div>/home/dhruv/web2py</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">cmd_args</td><td style="vertical-align:top;">:</td><td><div><table></table></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">cmd_options</td><td style="vertical-align:top;">:</td><td><div>&lt;Values at 0x7f9669ebef80: {&#x27;verbose&#x27;: False, &#x27;ip&#x27;: &#x27;127.0.0.1&#x27;, &#x27;debuglevel&#x27;: 30, &#x27;with_scheduler&#x27;: False, &#x27;ips&#x27;: [&#x27;127.0.1.1&#x27;], &#x27;shutdown_timeout&#x27;: 5, &#x27;taskbar&#x27;: False, &#x27;with_coverage&#x27;: False, &#x27;scheduler_groups&#x27;: None, &#x27;port&#x27;: 8000, &#x27;maxthreads&#x27;: None, &#x27;softcron&#x27;: False, &#x27;server_name&#x27;: &#x27;dhruv-Lenovo-Y50-70&#x27;, &#x27;bpython&#x27;: False, &#x27;nogui&#x27;: False, &#x27;pid_filename&#x27;: &#x27;httpserver.pid&#x27;, &#x27;extcron&#x27;: False, &#x27;runcron&#x27;: False, &#x27;run_system_tests&#x27;: False, &#x27;test&#x27;: None, &#x27;folder&#x27;: &#x27;/home/dhruv/web2py&#x27;, &#x27;config&#x27;: &#x27;&#x27;, &#x27;minthreads&#x27;: None, &#x27;shell&#x27;: None, &#x27;run&#x27;: &#x27;&#x27;, &#x27;log_filename&#x27;: &#x27;httpserver.log&#x27;, &#x27;profiler_dir&#x27;: None, &#x27;args&#x27;: [&#x27;&#x27;], &#x27;socket_timeout&#x27;: 5, &#x27;ssl_ca_certificate&#x27;: None, &#x27;scheduler&#x27;: None, &#x27;interfaces&#x27;: None, &#x27;ssl_private_key&#x27;: &#x27;&#x27;, &#x27;gae&#x27;: None, &#x27;password&#x27;: &#x27;&lt;ask&gt;&#x27;, &#x27;request_queue_size&#x27;: 5, &#x27;ssl_certificate&#x27;: &#x27;&#x27;, &#x27;cronjob&#x27;: False, &#x27;numthreads&#x27;: None, &#x27;quiet&#x27;: False, &#x27;import_models&#x27;: False, &#x27;timeout&#x27;: 10, &#x27;plain&#x27;: False, &#x27;nobanner&#x27;: False}&gt;</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">content_length</td><td style="vertical-align:top;">:</td><td><div>491</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">content_type</td><td style="vertical-align:top;">:</td><td><div>multipart/form-data; boundary=----WebKitFormBoundaryMvnE1FynrBRAZDiy</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">db_sessions</td><td style="vertical-align:top;">:</td><td><div>set([])</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">debugging</td><td style="vertical-align:top;">:</td><td><div>False</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">gluon_parent</td><td style="vertical-align:top;">:</td><td><div>/home/dhruv/web2py</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">http_accept</td><td style="vertical-align:top;">:</td><td><div>text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">http_accept_encoding</td><td style="vertical-align:top;">:</td><td><div>gzip, deflate</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">http_accept_language</td><td style="vertical-align:top;">:</td><td><div>en-US,en;q=0.8</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">http_cache_control</td><td style="vertical-align:top;">:</td><td><div>max-age=0</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">http_connection</td><td style="vertical-align:top;">:</td><td><div>keep-alive</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">http_content_length</td><td style="vertical-align:top;">:</td><td><div>491</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">http_content_type</td><td style="vertical-align:top;">:</td><td><div>multipart/form-data; boundary=----WebKitFormBoundaryMvnE1FynrBRAZDiy</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">http_cookie</td><td style="vertical-align:top;">:</td><td><div>session_id_soapcharts=127.0.0.1-9d21a5b9-a60d-4b30-8745-96479721b4e5; session_id_sample_app=127.0.0.1-0d057cb9-cdf5-4682-b07b-898dc068f898; session_id_admin=127.0.0.1-05ed102d-3ffa-437e-9a15-56a543746e13; session_id_critico=127.0.0.1-6207d672-0e88-4396-9de9-b4475a9b31e8</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">http_host</td><td style="vertical-align:top;">:</td><td><div>127.0.0.1:8000</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">http_origin</td><td style="vertical-align:top;">:</td><td><div>http://127.0.0.1:8000</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">http_referer</td><td style="vertical-align:top;">:</td><td><div>http://127.0.0.1:8000/critico/default/product_index/hello</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">http_user_agent</td><td style="vertical-align:top;">:</td><td><div>Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/40.0.2214.115 Safari/537.36</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">is_jython</td><td style="vertical-align:top;">:</td><td><div>False</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">is_pypy</td><td style="vertical-align:top;">:</td><td><div>False</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">is_source</td><td style="vertical-align:top;">:</td><td><div>True</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">local_hosts</td><td style="vertical-align:top;">:</td><td><div><table><tr><td><div>::1</div></td></tr><tr><td><div>127.0.1.1</div></td></tr><tr><td><div>::ffff:127.0.0.1</div></td></tr><tr><td><div>127.0.0.1</div></td></tr><tr><td><div>dhruv-Lenovo-Y50-70</div></td></tr></table></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">path_info</td><td style="vertical-align:top;">:</td><td><div>/critico/default/product_index/hello</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">query_string</td><td style="vertical-align:top;">:</td><td><div></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">remote_addr</td><td style="vertical-align:top;">:</td><td><div>127.0.0.1</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">remote_port</td><td style="vertical-align:top;">:</td><td><div>49686</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">request_method</td><td style="vertical-align:top;">:</td><td><div>POST</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">request_uri</td><td style="vertical-align:top;">:</td><td><div>/critico/default/product_index/hello</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">script_name</td><td style="vertical-align:top;">:</td><td><div></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">server_name</td><td style="vertical-align:top;">:</td><td><div>dhruv-Lenovo-Y50-70</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">server_port</td><td style="vertical-align:top;">:</td><td><div>8000</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">server_protocol</td><td style="vertical-align:top;">:</td><td><div>HTTP/1.1</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">server_software</td><td style="vertical-align:top;">:</td><td><div>Rocket 1.2.6</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">web2py_path</td><td style="vertical-align:top;">:</td><td><div>/home/dhruv/web2py</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">web2py_version</td><td style="vertical-align:top;">:</td><td><div>2.9.12-stable+timestamp.2015.01.17.06.11.03</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">wsgi.errors</td><td style="vertical-align:top;">:</td><td><div>&lt;open file &#x27;&lt;stderr&gt;&#x27;, mode &#x27;w&#x27; at 0x7f9670ee11e0&gt;</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">wsgi.file_wrapper</td><td style="vertical-align:top;">:</td><td><div>&lt;class wsgiref.util.FileWrapper at 0x7f966a15d258&gt;</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">wsgi.input</td><td style="vertical-align:top;">:</td><td><div>&lt;socket._fileobject object at 0x7f96131d35d0&gt;</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">wsgi.multiprocess</td><td style="vertical-align:top;">:</td><td><div>False</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">wsgi.multithread</td><td style="vertical-align:top;">:</td><td><div>True</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">wsgi.run_once</td><td style="vertical-align:top;">:</td><td><div>False</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">wsgi.url_scheme</td><td style="vertical-align:top;">:</td><td><div>http</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">wsgi.version</td><td style="vertical-align:top;">:</td><td><div><table><tr><td><div>1</div></td></tr><tr><td><div>0</div></td></tr></table></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">wsgi_errors</td><td style="vertical-align:top;">:</td><td><div>&lt;open file &#x27;&lt;stderr&gt;&#x27;, mode &#x27;w&#x27; at 0x7f9670ee11e0&gt;</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">wsgi_file_wrapper</td><td style="vertical-align:top;">:</td><td><div>&lt;class wsgiref.util.FileWrapper at 0x7f966a15d258&gt;</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">wsgi_input</td><td style="vertical-align:top;">:</td><td><div>&lt;socket._fileobject object at 0x7f96131d35d0&gt;</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">wsgi_multiprocess</td><td style="vertical-align:top;">:</td><td><div>False</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">wsgi_multithread</td><td style="vertical-align:top;">:</td><td><div>True</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">wsgi_run_once</td><td style="vertical-align:top;">:</td><td><div>False</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">wsgi_url_scheme</td><td style="vertical-align:top;">:</td><td><div>http</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">wsgi_version</td><td style="vertical-align:top;">:</td><td><div><table><tr><td><div>1</div></td></tr><tr><td><div>0</div></td></tr></table></div></td></tr></table></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">extension</td><td style="vertical-align:top;">:</td><td><div>html</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">folder</td><td style="vertical-align:top;">:</td><td><div>/home/dhruv/web2py/applications/critico/</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">function</td><td style="vertical-align:top;">:</td><td><div>product_index</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">global_settings</td><td style="vertical-align:top;">:</td><td><div><table><tr><td style="font-weight:bold;vertical-align:top;">app_folders</td><td style="vertical-align:top;">:</td><td><div>set([&#x27;/home/dhruv/web2py/applications/critico/&#x27;, &#x27;/home/dhruv/web2py/applications/admin/&#x27;])</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">applications_parent</td><td style="vertical-align:top;">:</td><td><div>/home/dhruv/web2py</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">cmd_args</td><td style="vertical-align:top;">:</td><td><div><table></table></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">cmd_options</td><td style="vertical-align:top;">:</td><td><div>&lt;Values at 0x7f9669ebef80: {&#x27;verbose&#x27;: False, &#x27;ip&#x27;: &#x27;127.0.0.1&#x27;, &#x27;debuglevel&#x27;: 30, &#x27;with_scheduler&#x27;: False, &#x27;ips&#x27;: [&#x27;127.0.1.1&#x27;], &#x27;shutdown_timeout&#x27;: 5, &#x27;taskbar&#x27;: False, &#x27;with_coverage&#x27;: False, &#x27;scheduler_groups&#x27;: None, &#x27;port&#x27;: 8000, &#x27;maxthreads&#x27;: None, &#x27;softcron&#x27;: False, &#x27;server_name&#x27;: &#x27;dhruv-Lenovo-Y50-70&#x27;, &#x27;bpython&#x27;: False, &#x27;nogui&#x27;: False, &#x27;pid_filename&#x27;: &#x27;httpserver.pid&#x27;, &#x27;extcron&#x27;: False, &#x27;runcron&#x27;: False, &#x27;run_system_tests&#x27;: False, &#x27;test&#x27;: None, &#x27;folder&#x27;: &#x27;/home/dhruv/web2py&#x27;, &#x27;config&#x27;: &#x27;&#x27;, &#x27;minthreads&#x27;: None, &#x27;shell&#x27;: None, &#x27;run&#x27;: &#x27;&#x27;, &#x27;log_filename&#x27;: &#x27;httpserver.log&#x27;, &#x27;profiler_dir&#x27;: None, &#x27;args&#x27;: [&#x27;&#x27;], &#x27;socket_timeout&#x27;: 5, &#x27;ssl_ca_certificate&#x27;: None, &#x27;scheduler&#x27;: None, &#x27;interfaces&#x27;: None, &#x27;ssl_private_key&#x27;: &#x27;&#x27;, &#x27;gae&#x27;: None, &#x27;password&#x27;: &#x27;&lt;ask&gt;&#x27;, &#x27;request_queue_size&#x27;: 5, &#x27;ssl_certificate&#x27;: &#x27;&#x27;, &#x27;cronjob&#x27;: False, &#x27;numthreads&#x27;: None, &#x27;quiet&#x27;: False, &#x27;import_models&#x27;: False, &#x27;timeout&#x27;: 10, &#x27;plain&#x27;: False, &#x27;nobanner&#x27;: False}&gt;</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">db_sessions</td><td style="vertical-align:top;">:</td><td><div>set([])</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">debugging</td><td style="vertical-align:top;">:</td><td><div>False</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">gluon_parent</td><td style="vertical-align:top;">:</td><td><div>/home/dhruv/web2py</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">is_jython</td><td style="vertical-align:top;">:</td><td><div>False</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">is_pypy</td><td style="vertical-align:top;">:</td><td><div>False</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">is_source</td><td style="vertical-align:top;">:</td><td><div>True</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">local_hosts</td><td style="vertical-align:top;">:</td><td><div><table><tr><td><div>::1</div></td></tr><tr><td><div>127.0.1.1</div></td></tr><tr><td><div>::ffff:127.0.0.1</div></td></tr><tr><td><div>127.0.0.1</div></td></tr><tr><td><div>dhruv-Lenovo-Y50-70</div></td></tr></table></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">web2py_version</td><td style="vertical-align:top;">:</td><td><div>2.9.12-stable+timestamp.2015.01.17.06.11.03</div></td></tr></table></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">is_https</td><td style="vertical-align:top;">:</td><td><div>False</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">is_local</td><td style="vertical-align:top;">:</td><td><div>True</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">is_restful</td><td style="vertical-align:top;">:</td><td><div>False</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">is_sheduler</td><td style="vertical-align:top;">:</td><td><div>None</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">is_shell</td><td style="vertical-align:top;">:</td><td><div>None</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">now</td><td style="vertical-align:top;">:</td><td><div>datetime.datetime(2015, 4, 5, 12, 5, 1, 923326)</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">raw_args</td><td style="vertical-align:top;">:</td><td><div>hello</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">raw_extension</td><td style="vertical-align:top;">:</td><td><div>None</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">url</td><td style="vertical-align:top;">:</td><td><div>/critico/default/product_index/hello</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">utcnow</td><td style="vertical-align:top;">:</td><td><div>datetime.datetime(2015, 4, 5, 6, 35, 1, 923339)</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">uuid</td><td style="vertical-align:top;">:</td><td><div>critico/127.0.0.1.2015-04-05.12-05-01.c6a7caa1-adca-4975-b154-abcb5404301b</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">wsgi</td><td style="vertical-align:top;">:</td><td><div>&lt;gluon.main.LazyWSGI object at 0x7f9613592590&gt;</div></td></tr></table></div>'
+tRp58
+sS'frames'
+p59
+(lp60
+(dp61
+S'file'
+p62
+S'/home/dhruv/web2py/gluon/restricted.py'
+p63
+sS'dump'
+p64
+(dp65
+S'environment'
+p66
+S"{'A': <class 'gluon.html.A'>, 'ANY_OF': <class 'gluon.validators.ANY_OF'>, 'ASSIGNJS': <function ASSIGNJS>, 'Auth': <class 'gluon.tools.Auth'>, 'B': <class 'gluon.html.B'>, 'BEAUTIFY': <class 'gluon.html.BEAUTIFY'>, 'BODY': <class 'gluon.html.BODY'>, 'BR': <class 'gluon.html.BR'>, 'BUTTON': <class 'gluon.html.BUTTON'>, 'CAT': <class 'gluon.html.CAT'>, ...}"
+p67
+sS'ccode'
+p68
+S'<code object <module> at 0x7f9613cc8330, file "/...cations/critico/controllers/default.py", line 12>'
+p69
+ssS'lnum'
+p70
+I224
+sS'lines'
+p71
+(dp72
+I224
+S'        exec ccode in environment'
+p73
+sI225
+S'    except HTTP:'
+p74
+sI226
+S'        raise'
+p75
+sI227
+S'    except RestrictedError:'
+p76
+sI228
+S'        # do not encapsulate (obfuscate) the original RestrictedError'
+p77
+sI219
+S'    try:'
+p78
+sI220
+S'        if isinstance(code, types.CodeType):'
+p79
+sI221
+S'            ccode = code'
+p80
+sI222
+S'        else:'
+p81
+sI223
+S'            ccode = compile2(code, layer)'
+p82
+ssS'call'
+p83
+S"(code='# -*- coding: utf-8 -*-\\n# this file is released ...t\\nresponse._vars=response._caller(product_index)\\n', environment={'A': <class 'gluon.html.A'>, 'ANY_OF': <class 'gluon.validators.ANY_OF'>, 'ASSIGNJS': <function ASSIGNJS>, 'Auth': <class 'gluon.tools.Auth'>, 'B': <class 'gluon.html.B'>, 'BEAUTIFY': <class 'gluon.html.BEAUTIFY'>, 'BODY': <class 'gluon.html.BODY'>, 'BR': <class 'gluon.html.BR'>, 'BUTTON': <class 'gluon.html.BUTTON'>, 'CAT': <class 'gluon.html.CAT'>, ...}, layer='/home/dhruv/web2py/applications/critico/controllers/default.py')"
+p84
+sS'func'
+p85
+S'restricted'
+p86
+sa(dp87
+g62
+S'/home/dhruv/web2py/applications/critico/controllers/default.py'
+p88
+sg64
+(dp89
+sg70
+I2013
+sg71
+(dp90
+I2003
+S''
+sI2004
+S'def getSentimentScore(text):'
+p91
+sI2005
+S'    #splitted_sentences = splitter.split(text)'
+p92
+sI2006
+S'    #pos_tagged_sentences = postagger.pos_tag(splitted_sentences)'
+p93
+sI2007
+S'    #dict_tagged_sentences_list = [dtagger.tag(pos_tagged_sentences) for dtagger in dicttagger]'
+p94
+sI2008
+S'    #score = [sentiment_score(dict_tagged_sentences) for dict_tagged_sentences in dict_tagged_sentences_list]'
+p95
+sI2009
+S'    normScoreList = [(1*5) for s in aspects]'
+p96
+sI2010
+S"    print 'score'"
+p97
+sI2011
+S'    print normScoreList'
+p98
+sI2012
+S'    return normScoreList'
+p99
+ssg83
+S'()'
+p100
+sg85
+S'<module>'
+p101
+sa(dp102
+g62
+S'/home/dhruv/web2py/gluon/globals.py'
+p103
+sg64
+(dp104
+S'self'
+p105
+S'undefined'
+p106
+sS'f'
+S'<function product_index>'
+p107
+ssg70
+I393
+sg71
+(dp108
+I388
+S"        self.flash = ''            # used by the default view layout"
+p109
+sI389
+S'        self.meta = Storage()      # used by web2py_ajax.html'
+p110
+sI390
+S'        self.menu = []             # used by the default view layout'
+p111
+sI391
+S'        self.files = []            # used by web2py_ajax.html'
+p112
+sI392
+S'        self._vars = None'
+p113
+sI393
+S'        self._caller = lambda f: f()'
+p114
+sI394
+S'        self._view_environment = None'
+p115
+sI395
+S'        self._custom_commit = None'
+p116
+sI396
+S'        self._custom_rollback = None'
+p117
+sI397
+S"        self.generic_patterns = ['*']"
+p118
+ssg83
+S'(f=<function product_index>)'
+p119
+sg85
+S'<lambda>'
+p120
+sa(dp121
+g62
+S'/home/dhruv/web2py/applications/critico/controllers/default.py'
+p122
+sg64
+(dp123
+S'global request'
+p124
+S"<Storage {'_vars': None, 'function': 'product_in...er': '/home/dhruv/web2py/applications/critico/'}>"
+p125
+sS'global getProductIdOf'
+p126
+S'<function getProductIdOf>'
+p127
+sS'request.args'
+p128
+S"['hello']"
+p129
+sS'global urllib2'
+p130
+S"<module 'urllib2' from '/usr/lib/python2.7/urllib2.pyc'>"
+p131
+sS'urllib2.unquote'
+p132
+S'<function unquote>'
+p133
+sS'global getProductPage'
+p134
+S'<function getProductPage>'
+p135
+ssg70
+I61
+sg71
+(dp136
+I64
+S''
+sI65
+S'def getProductPage(prodId):'
+p137
+sI56
+S"        redirect(URL(urllib2.quote('product_index/'+form.vars.product_name)))"
+p138
+sI57
+S"    return dict(message='Hi user', form=form)"
+p139
+sI58
+S''
+sI59
+S'def product_index():'
+p140
+sI60
+S'    if isProductWithThisNameExists(urllib2.unquote(request.args(0))):'
+p141
+sI61
+S'        return getProductPage(getProductIdOf(urllib2.unquote(request.args(0))))'
+p142
+sI62
+S'    else:'
+p143
+sI63
+S"        return dict(message='Product not found!', form=FORM())"
+p144
+ssg83
+S'()'
+p145
+sg85
+S'product_index'
+p146
+sa(dp147
+g62
+S'/home/dhruv/web2py/applications/critico/controllers/default.py'
+p148
+sg64
+(dp149
+S'global getAuthBasedProductProfile'
+p150
+S'<function getAuthBasedProductProfile>'
+p151
+sS'global getAuthBasedAllEditonForm'
+p152
+S'<function getAuthBasedAllEditonForm>'
+p153
+sS'edition_info'
+p154
+g106
+sS'contrib_info'
+p155
+g106
+sS'review_info'
+p156
+g106
+sS'video_info'
+p157
+g106
+sS'global getAuthBasedReviewForm'
+p158
+S'<function getAuthBasedReviewForm>'
+p159
+sS'global getAuthBasedAllNewsForm'
+p160
+S'<function getAuthBasedAllNewsForm>'
+p161
+sS'builtindict'
+p162
+S"<type 'dict'>"
+p163
+sS'global getAuthBasedAllContributorForm'
+p164
+S'<function getAuthBasedAllContributorForm>'
+p165
+sS'product_info'
+p166
+g106
+sS'global getAuthBasedAllVideoForm'
+p167
+S'<function getAuthBasedAllVideoForm>'
+p168
+sS'prodId'
+p169
+S'5L'
+p170
+sS'news_info'
+p171
+g106
+ssg70
+I66
+sg71
+(dp172
+I64
+S''
+sI65
+S'def getProductPage(prodId):'
+p173
+sI66
+S"    return dict(product_info=getAuthBasedProductProfile(prodId), edition_info=getAuthBasedAllEditonForm(prodId), contrib_info=getAuthBasedAllContributorForm(prodId), news_info=getAuthBasedAllNewsForm(prodId), video_info=getAuthBasedAllVideoForm('product', prodId), review_info=getAuthBasedReviewForm('product', prodId))"
+p174
+sI67
+S''
+sI68
+S''
+sI69
+S'def productIndex():'
+p175
+sI70
+S'    rows = db(db.product.admin_ref == auth.user_id).select()'
+p176
+sI61
+S'        return getProductPage(getProductIdOf(urllib2.unquote(request.args(0))))'
+p177
+sI62
+S'    else:'
+p178
+sI63
+S"        return dict(message='Product not found!', form=FORM())"
+p179
+ssg83
+S'(prodId=5L)'
+p180
+sg85
+S'getProductPage'
+p181
+sa(dp182
+g62
+S'/home/dhruv/web2py/applications/critico/controllers/default.py'
+p183
+sg64
+(dp184
+S'typeId'
+p185
+S'5L'
+p186
+sS'type_'
+p187
+S"'product'"
+p188
+sS'global getAuthBasedButtonToAddReview'
+p189
+S'<function getAuthBasedButtonToAddReview>'
+p190
+sS'form'
+p191
+g106
+ssg70
+I1454
+sg71
+(dp192
+I1449
+S"        return SQLFORM.factory(buttons=[], table_name='review_null')"
+p193
+sI1450
+S'    else:'
+p194
+sI1451
+S'        return getButtonToAddReview(type_, typeId)'
+p195
+sI1452
+S''
+sI1453
+S'def getAuthBasedReviewForm(type_, typeId):'
+p196
+sI1454
+S'    form = getAuthBasedButtonToAddReview(type_, typeId)'
+p197
+sI1455
+S'    allForms = getAllReviewForms(type_, typeId)'
+p198
+sI1456
+S'    allForms.append(form)'
+p199
+sI1457
+S'    return allForms'
+p200
+sI1458
+S''
+ssg83
+S"(type_='product', typeId=5L)"
+p201
+sg85
+S'getAuthBasedReviewForm'
+p202
+sa(dp203
+g62
+S'/home/dhruv/web2py/applications/critico/controllers/default.py'
+p204
+sg64
+(dp205
+S'typeId'
+p206
+S'5L'
+p207
+sS'type_'
+p208
+S"'product'"
+p209
+sS'global getButtonToAddReview'
+p210
+S'<function getButtonToAddReview>'
+p211
+ssg70
+I1451
+sg71
+(dp212
+I1446
+S''
+sI1447
+S'def getAuthBasedButtonToAddReview(type_, typeId):'
+p213
+sI1448
+S"    if not session.auth or auth.user.user_type == 'b':"
+p214
+sI1449
+S"        return SQLFORM.factory(buttons=[], table_name='review_null')"
+p215
+sI1450
+S'    else:'
+p216
+sI1451
+S'        return getButtonToAddReview(type_, typeId)'
+p217
+sI1452
+S''
+sI1453
+S'def getAuthBasedReviewForm(type_, typeId):'
+p218
+sI1454
+S'    form = getAuthBasedButtonToAddReview(type_, typeId)'
+p219
+sI1455
+S'    allForms = getAllReviewForms(type_, typeId)'
+p220
+ssg83
+S"(type_='product', typeId=5L)"
+p221
+sg85
+S'getAuthBasedButtonToAddReview'
+p222
+sa(dp223
+g62
+S'/home/dhruv/web2py/applications/critico/controllers/default.py'
+p224
+sg64
+(dp225
+S'typeId'
+p226
+S'5L'
+p227
+sS'type_'
+p228
+S"'product'"
+p229
+sS'global getEditableReviewForm'
+p230
+S'<function getEditableReviewForm>'
+p231
+sS'addForm'
+p232
+g106
+ssg70
+I1408
+sg71
+(dp233
+I1408
+S'    addForm = getEditableReviewForm(-1, type_, typeId)'
+p234
+sI1409
+S"    form = SQLFORM.factory(submit_button='Write review!', table_name='review_add')"
+p235
+sI1410
+S'    if form.accepts(request, session):'
+p236
+sI1411
+S'        return addForm'
+p237
+sI1412
+S'    return form'
+p238
+sI1403
+S'    form[0].insert(-1,userName)'
+p239
+sI1404
+S''
+sI1405
+S'    return form'
+p240
+sI1406
+S''
+sI1407
+S'def getButtonToAddReview(type_, typeId):'
+p241
+ssg83
+S"(type_='product', typeId=5L)"
+p242
+sg85
+S'getButtonToAddReview'
+p243
+sa(dp244
+g62
+S'/home/dhruv/web2py/applications/critico/controllers/default.py'
+p245
+sg64
+(dp246
+S'global addToProductAspectsScore'
+p247
+S'<function addToProductAspectsScore>'
+p248
+sS'normScore1'
+p249
+S'[5, 5]'
+p250
+ssg70
+I1369
+sg71
+(dp251
+I1364
+S'    if form.accepts(request, session):'
+p252
+sI1365
+S"        response.flash = 'Submitted!'"
+p253
+sI1366
+S'        if isNewReview:'
+p254
+sI1367
+S'            normScore1 = getSentimentScore(form.vars.description)'
+p255
+sI1368
+S'            normScore2 = getSentimentScore(form.vars.title)'
+p256
+sI1369
+S'            addToProductAspectsScore(normScore1)'
+p257
+sI1370
+S'            addToProductAspectsScore(normScore2)'
+p258
+sI1371
+S'            setReviewAnalyzed(form.vars.id)'
+p259
+sI1372
+S''
+sI1373
+S'    return form'
+p260
+ssg83
+S"(revId=-1, type_='product', typeId=5L)"
+p261
+sg85
+S'getEditableReviewForm'
+p262
+sasS'pyver'
+p263
+S'Python 2.7.6: /usr/bin/python (prefix: /usr)'
+p264
+sS'session'
+p265
+g57
+(S'sf\x13\x00\x00<div><table><tr><td style="font-weight:bold;vertical-align:top;">auth</td><td style="vertical-align:top;">:</td><td><div><table><tr><td style="font-weight:bold;vertical-align:top;">expiration</td><td style="vertical-align:top;">:</td><td><div>3600</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">hmac_key</td><td style="vertical-align:top;">:</td><td><div>661bc243-cba2-4db4-abeb-9bbce68d66e9</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">last_visit</td><td style="vertical-align:top;">:</td><td><div>datetime.datetime(2015, 4, 5, 12, 4, 52, 394924)</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">remember_me</td><td style="vertical-align:top;">:</td><td><div>False</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">user</td><td style="vertical-align:top;">:</td><td><div><table><tr><td style="font-weight:bold;vertical-align:top;">city</td><td style="vertical-align:top;">:</td><td><div></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">country</td><td style="vertical-align:top;">:</td><td><div></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">date_of_birth</td><td style="vertical-align:top;">:</td><td><div>None</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">display_picture_blob</td><td style="vertical-align:top;">:</td><td><div>\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x01\xa4\x00\x00\x01\xa4\x08\x02\x00\x00\x00\xf1.\xc6b\x00\x00\x05\xc7IDATx\x9c\xec\xd6A\xb5\x9c`\x10\x06\xd1L\xce\x13\x81\x1b\x04\xa1\x07A\xb8a\xd9\x12b&quot;\xe1\x1fR\xf7\x1a\xe8oU\xa7\x7ff\xe6\x17\xc0\xff\xee\xf7\xea\x01\x00O\x10; A\xec\x80\x04\xb1\x03\x12\xc4\x0eH\x10; A\xec\x80\x04\xb1\x03\x12\xc4\x0eH\x10; A\xec\x80\x04\xb1\x03\x12\xc4\x0eH\x10; A\xec\x80\x04\xb1\x03\x12\xc4\x0eH\x10; A\xec\x80\x04\xb1\x03\x12\xc4\x0eH\x10; A\xec\x80\x04\xb1\x03\x12\xc4\x0eH\x10; A\xec\x80\x04\xb1\x03\x12\xc4\x0eH\x10; A\xec\x80\x04\xb1\x03\x12\xc4\x0eH\x10; A\xec\x80\x04\xb1\x03\x12\xc4\x0eH\x10; A\xec\x80\x04\xb1\x03\x12\xc4\x0eH\x10; A\xec\x80\x04\xb1\x03\x12\xc4\x0eH\x10; A\xec\x80\x04\xb1\x03\x12\xc4\x0eH\x10; A\xec\x80\x04\xb1\x03\x12\xc4\x0eH\x10; A\xec\x80\x04\xb1\x03\x12\xc4\x0eH\x10; A\xec\x80\x04\xb1\x03\x12\xc4\x0eH\x10; A\xec\x80\x04\xb1\x03\x12\xc4\x0eH\x10; A\xec\x80\x04\xb1\x03\x12\xc4\x0eH\x10; A\xec\x80\x04\xb1\x03\x12\xc4\x0eH\x10; A\xec\x80\x04\xb1\x03\x12\xc4\x0eH\x10; A\xec\x80\x04\xb1\x03\x12\xc4\x0eH\x10; A\xec\x80\x04\xb1\x03\x12\xc4\x0eH\x10; A\xec\x80\x04\xb1\x03\x12\xc4\x0eH\x10; A\xec\x80\x04\xb1\x03\x12\xc4\x0eH\x10; A\xec\x80\x04\xb1\x03\x12\xc4\x0eH\x10; A\xec\x80\x04\xb1\x03\x12\xc4\x0eH\x10; A\xec\x80\x04\xb1\x03\x12~V\x0fx\xb1\xf3\xbeVO\xa0\xe8\xd8\xf6\xd5\x13^\xc9g\x07$\x88\x1d\x90 v@\x82\xd8\x01\tb\x07$\x88\x1d\x90 v@\x82\xd8\x01\tb\x07$\x88\x1d\x90 v@\x82\xd8\x01\tb\x07$\x88\x1d\x90 v@\x82\xd8\x01\tb\x07$\x88\x1d\x90 v@\x82\xd8\x01\tb\x07$\x88\x1d\x90 v@\x82\xd8\x01\tb\x07$\x88\x1d\x90 v@\x82\xd8\x01\tb\x07$\x88\x1d\x90 v@\x82\xd8\x01\tb\x07$\x88\x1d\x90 v@\x82\xd8\x01\tb\x07$\x88\x1d\x90 v@\x82\xd8\x01\tb\x07$\x88\x1d\x90 v@\x82\xd8\x01\tb\x07$\x88\x1d\x90 v@\x82\xd8\x01\tb\x07$\x88\x1d\x90 v@\x82\xd8\x01\tb\x07$\x88\x1d\x90 v@\x82\xd8\x01\tb\x07$\x88\x1d\x90 v@\x82\xd8\x01\tb\x07$\x88\x1d\x90 v@\x82\xd8\x01\tb\x07$\x88\x1d\x90 v@\x82\xd8\x01\tb\x07$|f\xe6\x99K\xe7}=s\x08x\x97c\xdb\x1f\xb8\xe2\xb3\x03\x12\xc4\x0eH\x10; A\xec\x80\x04\xb1\x03\x12\xc4\x0eH\x10; A\xec\x80\x04\xb1\x03\x12\xc4\x0eH\x10; A\xec\x80\x04\xb1\x03\x12\xc4\x0eH\x10; A\xec\x80\x04\xb1\x03\x12\xc4\x0eH\x10; A\xec\x80\x04\xb1\x03\x12\xc4\x0eH\x10; A\xec\x80\x04\xb1\x03\x12\xc4\x0eH\x10; A\xec\x80\x04\xb1\x03\x12\xc4\x0eH\x10; A\xec\x80\x04\xb1\x03\x12\xc4\x0eH\x10; A\xec\x80\x04\xb1\x03\x12\xc4\x0eH\x10; A\xec\x80\x04\xb1\x03\x12\xc4\x0eH\x10; A\xec\x80\x04\xb1\x03\x12\xc4\x0eH\x10; A\xec\x80\x04\xb1\x03\x12\xc4\x0eH\x10; A\xec\x80\x04\xb1\x03\x12\xc4\x0eH\x10; A\xec\x80\x04\xb1\x03\x12\xc4\x0eH\x10; A\xec\x80\x04\xb1\x03\x12\xc4\x0eH\x10; A\xec\x80\x04\xb1\x03\x12\xc4\x0eH\x10; A\xec\x80\x04\xb1\x03\x12\xc4\x0eH\xf8\xcc\xcc\xea\r|\x8b\xf3\xbeVO\xf8\xfb\x8em_=\x81\xaf\xe0\xb3\x03\x12\xc4\x0eH\x10; A\xec\x80\x04\xb1\x03\x12\xc4\x0eH\x10; A\xec\x80\x04\xb1\x03\x12\xc4\x0eH\x10; A\xec\x80\x04\xb1\x03\x12\xc4\x0eH\x10; A\xec\x80\x04\xb1\x03\x12\xc4\x0eH\x10; A\xec\x80\x04\xb1\x03\x12\xc4\x0eH\x10; A\xec\x80\x04\xb1\x03\x12\xc4\x0eH\x10; A\xec\x80\x04\xb1\x03\x12\xc4\x0eH\x10; A\xec\x80\x04\xb1\x03\x12\xc4\x0eH\x10; A\xec\x80\x04\xb1\x03\x12\xc4\x0eH\x10; A\xec\x80\x04\xb1\x03\x12\xc4\x0eH\x10; A\xec\x80\x04\xb1\x03\x12\xc4\x0eH\x10; A\xec\x80\x04\xb1\x03\x12\xc4\x0eH\x10; A\xec\x80\x04\xb1\x03\x12\xc4\x0eH\x10; A\xec\x80\x04\xb1\x03\x12\xc4\x0eH\x10; A\xec\x80\x04\xb1\x03\x12\xc4\x0eH\x10; A\xec\x80\x04\xb1\x03\x12\xc4\x0eH\x10; A\xec\x80\x84\xcf\xcc\xac\xde\xf0V\xe7}\xad\x9e@\xd1\xb1\xed\xab&#x27;\xbc\x92\xcf\x0eH\x10; A\xec\x80\x04\xb1\x03\x12\xc4\x0eH\x10; A\xec\x80\x04\xb1\x03\x12\xc4\x0eH\x10; A\xec\x80\x04\xb1\x03\x12\xc4\x0eH\x10; A\xec\x80\x04\xb1\x03\x12\xc4\x0eH\x10; A\xec\x80\x04\xb1\x03\x12\xc4\x0eH\x10; A\xec\x80\x04\xb1\x03\x12\xc4\x0eH\x10; A\xec\x80\x04\xb1\x03\x12\xc4\x0eH\x10; A\xec\x80\x04\xb1\x03\x12\xc4\x0eH\x10; A\xec\x80\x04\xb1\x03\x12\xc4\x0eH\x10; A\xec\x80\x04\xb1\x03\x12\xc4\x0eH\x10; A\xec\x80\x04\xb1\x03\x12\xc4\x0eH\x10; A\xec\x80\x04\xb1\x03\x12\xc4\x0eH\x10; A\xec\x80\x04\xb1\x03\x12\xc4\x0eH\x10; A\xec\x80\x04\xb1\x03\x12\xc4\x0eH\x10; A\xec\x80\x04\xb1\x03\x12\xc4\x0eH\x10; A\xec\x80\x04\xb1\x03\x12\xc4\x0eH\x10; A\xec\x80\x04\xb1\x03\x12\xc4\x0eH\x10; \xe133\xab7\x00\xfcs&gt;; A\xec\x80\x04\xb1\x03\x12\xc4\x0eH\x10; A\xec\x80\x04\xb1\x03\x12\xc4\x0eH\x10; A\xec\x80\x04\xb1\x03\x12\xc4\x0eH\x10; A\xec\x80\x04\xb1\x03\x12\xc4\x0eH\x10; A\xec\x80\x04\xb1\x03\x12\xc4\x0eH\x10; A\xec\x80\x04\xb1\x03\x12\xc4\x0eH\x10; A\xec\x80\x04\xb1\x03\x12\xc4\x0eH\x10; A\xec\x80\x04\xb1\x03\x12\xc4\x0eH\x10; \xe1O\x00\x00\x00\xff\xffNA\x1dY\xc2&lt;\xb7a\x00\x00\x00\x00IEND\xaeB`\x82</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">display_picture_name</td><td style="vertical-align:top;">:</td><td><div>auth_user.display_picture_name.9d2d617fb1f4065e.323539353138362e706e67.png</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">email</td><td style="vertical-align:top;">:</td><td><div>sqd@gmail.com</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">first_name</td><td style="vertical-align:top;">:</td><td><div>Dhruv</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">gender</td><td style="vertical-align:top;">:</td><td><div>None</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">id</td><td style="vertical-align:top;">:</td><td><div>5L</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">last_name</td><td style="vertical-align:top;">:</td><td><div>Kohli</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">registration_id</td><td style="vertical-align:top;">:</td><td><div></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">registration_key</td><td style="vertical-align:top;">:</td><td><div></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">reset_password_key</td><td style="vertical-align:top;">:</td><td><div></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">state_</td><td style="vertical-align:top;">:</td><td><div></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">user_type</td><td style="vertical-align:top;">:</td><td><div>a</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">username</td><td style="vertical-align:top;">:</td><td><div>qwe</div></td></tr></table></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">user_groups</td><td style="vertical-align:top;">:</td><td><div><table></table></div></td></tr></table></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">flash</td><td style="vertical-align:top;">:</td><td><div>None</div></td></tr></table></div>'
+tRp266
+sS'etype'
+p267
+S"<type 'exceptions.TypeError'>"
+p268
+sS'date'
+p269
+S'Sun Apr  5 12:05:02 2015'
+p270
+sS'response'
+p271
+g57
+(S's\x106\x00\x00<div><table><tr><td style="font-weight:bold;vertical-align:top;">body</td><td style="vertical-align:top;">:</td><td><div>&lt;cStringIO.StringO object at 0x7f9613279b20&gt;</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">cookies</td><td style="vertical-align:top;">:</td><td><div><table><tr><td style="font-weight:bold;vertical-align:top;">session_id_critico</td><td style="vertical-align:top;">:</td><td><div>127.0.0.1-6207d672-0e88-4396-9de9-b4475a9b31e8<table><tr><td style="font-weight:bold;vertical-align:top;">comment</td><td style="vertical-align:top;">:</td><td><div></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">domain</td><td style="vertical-align:top;">:</td><td><div></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">expires</td><td style="vertical-align:top;">:</td><td><div></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">httponly</td><td style="vertical-align:top;">:</td><td><div></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">max-age</td><td style="vertical-align:top;">:</td><td><div></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">path</td><td style="vertical-align:top;">:</td><td><div>/</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">secure</td><td style="vertical-align:top;">:</td><td><div></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">version</td><td style="vertical-align:top;">:</td><td><div></div></td></tr></table></div></td></tr></table></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">delimiters</td><td style="vertical-align:top;">:</td><td><div><table><tr><td><div>{{</div></td></tr><tr><td><div>}}</div></td></tr></table></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">files</td><td style="vertical-align:top;">:</td><td><div><table><tr><td><div>/critico/static/plugin_wiki/ui/css/redmond/jquery-ui-1.8.5.custom.css</div></td></tr><tr><td><div>/critico/static/plugin_wiki/ui/js/jquery-ui-1.8.5.custom.min.js</div></td></tr><tr><td><div>/critico/static/plugin_wiki/jqgrid/ui.jqgrid.css</div></td></tr><tr><td><div>/critico/static/plugin_wiki/jqgrid/i18n/grid.locale-en.js</div></td></tr><tr><td><div>/critico/static/plugin_wiki/jqgrid/jquery.jqGrid.min.js</div></td></tr><tr><td><div>/critico/static/plugin_wiki/slideshow/jquery.cycle.min.js</div></td></tr><tr><td><div>/critico/static/plugin_wiki/multiselect/jquery.multiselect.css</div></td></tr><tr><td><div>/critico/static/plugin_wiki/multiselect/jquery.multiselect.js</div></td></tr><tr><td><div>/critico/static/plugin_wiki/rating/jquery.rating.css</div></td></tr><tr><td><div>/critico/static/plugin_wiki/rating/jquery.rating.js</div></td></tr></table></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">flash</td><td style="vertical-align:top;">:</td><td><div>Submitted!</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">form_label_separator</td><td style="vertical-align:top;">:</td><td><div>: </div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">formstyle</td><td style="vertical-align:top;">:</td><td><div>table3cols</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">generic_patterns</td><td style="vertical-align:top;">:</td><td><div><table><tr><td><div>*</div></td></tr></table></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">google_analytics_id</td><td style="vertical-align:top;">:</td><td><div>None</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">headers</td><td style="vertical-align:top;">:</td><td><div><table><tr><td style="font-weight:bold;vertical-align:top;">X-Powered-By</td><td style="vertical-align:top;">:</td><td><div>web2py</div></td></tr></table></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">logo</td><td style="vertical-align:top;">:</td><td><div><a class="brand" href="http://www.web2py.com/"><b>web<span>2</span>py</b>&trade;&nbsp;</a></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">menu</td><td style="vertical-align:top;">:</td><td><div><table><tr><td><div><table><tr><td><div>Home</div></td></tr><tr><td><div>False</div></td></tr><tr><td><div>/critico/default/index</div></td></tr><tr><td><div><table></table></div></td></tr></table></div></td></tr><tr><td><div><table><tr><td><div><span class="highlighted">web2py</span></div></td></tr><tr><td><div>False</div></td></tr><tr><td><div>http://web2py.com</div></td></tr><tr><td><div><table><tr><td><div><table><tr><td><div>My Sites</div></td></tr><tr><td><div>False</div></td></tr><tr><td><div>/admin/default/site</div></td></tr></table></div></td></tr><tr><td><div><table><tr><td><div>This App</div></td></tr><tr><td><div>False</div></td></tr><tr><td><div>/admin/default/design/critico</div></td></tr><tr><td><div>[(&lt;lazyT &#x27;Controller&#x27;&gt;, False, &#x27;/admin/default/edit/critico/controllers/default.py&#x27;), (&lt;lazyT &#x27;View&#x27;&gt;, False, &#x27;/admin/default/edit/critico/views/default/product_index.html&#x27;), (&lt;lazyT &#x27;Layout&#x27;&gt;, False, &#x27;/admin/default/edit/critico/views/layout.html&#x27;), (&lt;lazyT &#x27;Stylesheet&#x27;&gt;, False, &#x27;/admin/default/edit/critico/static/css/web2py.css&#x27;), (&lt;lazyT &#x27;DB Model&#x27;&gt;, False, &#x27;/admin/default/edit/critico/models/db.py&#x27;), (&lt;lazyT &#x27;Menu Model&#x27;&gt;, False, &#x27;/admin/default/edit/critico/models/menu.py&#x27;), (&lt;lazyT &#x27;Database&#x27;&gt;, False, &#x27;/critico/appadmin/index&#x27;), (&lt;lazyT &#x27;Errors&#x27;&gt;, False, &#x27;/admin/default/errors/critico&#x27;), (&lt;lazyT &#x27;About&#x27;&gt;, False, &#x27;/admin/default/about/critico&#x27;)]</div></td></tr></table></div></td></tr><tr><td><div><table><tr><td><div>web2py.com</div></td></tr><tr><td><div>False</div></td></tr><tr><td><div>http://www.web2py.com</div></td></tr><tr><td><div>[(&lt;lazyT &#x27;Download&#x27;&gt;, False, &#x27;http://www.web2py.com/examples/default/download&#x27;), (&lt;lazyT &#x27;Support&#x27;&gt;, False, &#x27;http://www.web2py.com/examples/default/support&#x27;), (&lt;lazyT &#x27;Demo&#x27;&gt;, False, &#x27;http://web2py.com/demo_admin&#x27;), (&lt;lazyT &#x27;Quick Examples&#x27;&gt;, False, &#x27;http://web2py.com/examples/default/examples&#x27;), (&lt;lazyT &#x27;FAQ&#x27;&gt;, False, &#x27;http://web2py.com/AlterEgo&#x27;), (&lt;lazyT &#x27;Videos&#x27;&gt;, False, &#x27;http://www.web2py.com/examples/default/videos/&#x27;), (&lt;lazyT &#x27;Free Applications&#x27;&gt;, False, &#x27;http://web2py.com/appliances&#x27;), (&lt;lazyT &#x27;Plugins&#x27;&gt;, False, &#x27;http://web2py.com/plugins&#x27;), (&lt;lazyT &#x27;Layouts&#x27;&gt;, False, &#x27;http://web2py.com/layouts&#x27;), (&lt;lazyT &#x27;Recipes&#x27;&gt;, False, &#x27;http://web2pyslices.com/&#x27;), (&lt;lazyT &#x27;Semantic&#x27;&gt;, False, &#x27;http://web2py.com/semantic&#x27;)]</div></td></tr></table></div></td></tr><tr><td><div><table><tr><td><div>Documentation</div></td></tr><tr><td><div>False</div></td></tr><tr><td><div>http://www.web2py.com/book</div></td></tr><tr><td><div>[(&lt;lazyT &#x27;Preface&#x27;&gt;, False, &#x27;http://www.web2py.com/book/default/chapter/00&#x27;), (&lt;lazyT &#x27;Introduction&#x27;&gt;, False, &#x27;http://www.web2py.com/book/default/chapter/01&#x27;), (&lt;lazyT &#x27;Python&#x27;&gt;, False, &#x27;http://www.web2py.com/book/default/chapter/02&#x27;), (&lt;lazyT &#x27;Overview&#x27;&gt;, False, &#x27;http://www.web2py.com/book/default/chapter/03&#x27;), (&lt;lazyT &#x27;The Core&#x27;&gt;, False, &#x27;http://www.web2py.com/book/default/chapter/04&#x27;), (&lt;lazyT &#x27;The Views&#x27;&gt;, False, &#x27;http://www.web2py.com/book/default/chapter/05&#x27;), (&lt;lazyT &#x27;Database&#x27;&gt;, False, &#x27;http://www.web2py.com/book/default/chapter/06&#x27;), (&lt;lazyT &#x27;Forms and Validators&#x27;&gt;, False, &#x27;http://www.web2py.com/book/default/chapter/07&#x27;), (&lt;lazyT &#x27;Email and SMS&#x27;&gt;, False, &#x27;http://www.web2py.com/book/default/chapter/08&#x27;), (&lt;lazyT &#x27;Access Control&#x27;&gt;, False, &#x27;http://www.web2py.com/book/default/chapter/09&#x27;), (&lt;lazyT &#x27;Services&#x27;&gt;, False, &#x27;http://www.web2py.com/book/default/chapter/10&#x27;), (&lt;lazyT &#x27;Ajax Recipes&#x27;&gt;, False, &#x27;http://www.web2py.com/book/default/chapter/11&#x27;), (&lt;lazyT &#x27;Components and Plugins&#x27;&gt;, False, &#x27;http://www.web2py.com/book/default/chapter/12&#x27;), (&lt;lazyT &#x27;Deployment Recipes&#x27;&gt;, False, &#x27;http://www.web2py.com/book/default/chapter/13&#x27;), (&lt;lazyT &#x27;Other Recipes&#x27;&gt;, False, &#x27;http://www.web2py.com/book/default/chapter/14&#x27;), (&lt;lazyT &#x27;Buy this book&#x27;&gt;, False, &#x27;http://stores.lulu.com/web2py&#x27;)]</div></td></tr></table></div></td></tr><tr><td><div><table><tr><td><div>Community</div></td></tr><tr><td><div>False</div></td></tr><tr><td><div>None</div></td></tr><tr><td><div>[(&lt;lazyT &#x27;Groups&#x27;&gt;, False, &#x27;http://www.web2py.com/examples/default/usergroups&#x27;), (&lt;lazyT &#x27;Twitter&#x27;&gt;, False, &#x27;http://twitter.com/web2py&#x27;), (&lt;lazyT &#x27;Live Chat&#x27;&gt;, False, &#x27;http://webchat.freenode.net/?channels=web2py&#x27;)]</div></td></tr></table></div></td></tr><tr><td><div><table><tr><td><div>Plugins</div></td></tr><tr><td><div>False</div></td></tr><tr><td><div>None</div></td></tr><tr><td><div>[(&#x27;plugin_wiki&#x27;, False, &#x27;http://web2py.com/examples/default/download&#x27;), (&lt;lazyT &#x27;Other Plugins&#x27;&gt;, False, &#x27;http://web2py.com/plugins&#x27;), (&lt;lazyT &#x27;Layout Plugins&#x27;&gt;, False, &#x27;http://web2py.com/layouts&#x27;)]</div></td></tr></table></div></td></tr></table></div></td></tr></table></div></td></tr></table></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">meta</td><td style="vertical-align:top;">:</td><td><div><table><tr><td style="font-weight:bold;vertical-align:top;">author</td><td style="vertical-align:top;">:</td><td><div>Your Name &lt;you@example.com&gt;</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">generator</td><td style="vertical-align:top;">:</td><td><div>Web2py Web Framework</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">keywords</td><td style="vertical-align:top;">:</td><td><div>web2py, python, framework</div></td></tr></table></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">models_to_run</td><td style="vertical-align:top;">:</td><td><div><table><tr><td><div>^\\w+\\.py$</div></td></tr><tr><td><div>^default/\\w+\\.py$</div></td></tr><tr><td><div>^default/product_index/\\w+\\.py$</div></td></tr></table></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">postprocessing</td><td style="vertical-align:top;">:</td><td><div><table></table></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">session_client</td><td style="vertical-align:top;">:</td><td><div>127.0.0.1</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">session_cookie_compression_level</td><td style="vertical-align:top;">:</td><td><div>None</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">session_cookie_expires</td><td style="vertical-align:top;">:</td><td><div>None</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">session_cookie_key</td><td style="vertical-align:top;">:</td><td><div>None</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">session_data_name</td><td style="vertical-align:top;">:</td><td><div>session_data_critico</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">session_file</td><td style="vertical-align:top;">:</td><td><div>&lt;open file &#x27;/home/dhruv/web2py/applications/critico/sessions/1cd/0ca/127.0.0.1-6207d672-0e88-4396-9de9-b4475a9b31e8&#x27;, mode &#x27;rb+&#x27; at 0x7f96133aa810&gt;</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">session_filename</td><td style="vertical-align:top;">:</td><td><div>/home/dhruv/web2py/applications/critico/sessions/127.0.0.1-6207d672-0e88-4396-9de9-b4475a9b31e8</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">session_hash</td><td style="vertical-align:top;">:</td><td><div>5d46bedd7845e1a5f35bda41891650d5</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">session_id</td><td style="vertical-align:top;">:</td><td><div>127.0.0.1-6207d672-0e88-4396-9de9-b4475a9b31e8</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">session_id_name</td><td style="vertical-align:top;">:</td><td><div>session_id_critico</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">session_locked</td><td style="vertical-align:top;">:</td><td><div>True</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">session_masterapp</td><td style="vertical-align:top;">:</td><td><div>critico</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">session_new</td><td style="vertical-align:top;">:</td><td><div>False</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">session_storage_type</td><td style="vertical-align:top;">:</td><td><div>file</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">status</td><td style="vertical-align:top;">:</td><td><div>200</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">subtitle</td><td style="vertical-align:top;">:</td><td><div></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">title</td><td style="vertical-align:top;">:</td><td><div>Critico</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">view</td><td style="vertical-align:top;">:</td><td><div>default/product_index.html</div></td></tr></table></div>'
+tRp272
+sS'locals'
+p273
+(dp274
+S'userName'
+p275
+S'<gluon.html.TR object>'
+p276
+sS'isNewReview'
+p277
+S'True'
+p278
+sS'form'
+p279
+S'<gluon.sqlhtml.SQLFORM object>'
+p280
+sS'typeId'
+p281
+S'5L'
+p282
+sS'userId'
+p283
+S'5L'
+p284
+sS'update'
+p285
+S'None'
+p286
+sS'revId'
+p287
+S'-1'
+p288
+sS'type_'
+p289
+S"'product'"
+p290
+sS'normScore2'
+p291
+S'[5, 5]'
+p292
+sS'normScore1'
+p293
+S'[5, 5]'
+p294
+sS'submitBtnStr'
+p295
+S"'Submit'"
+p296
+sssS'traceback'
+p297
+S'Traceback (most recent call last):\n  File "/home/dhruv/web2py/gluon/restricted.py", line 224, in restricted\n    exec ccode in environment\n  File "/home/dhruv/web2py/applications/critico/controllers/default.py", line 2013, in <module>\n  File "/home/dhruv/web2py/gluon/globals.py", line 393, in <lambda>\n    self._caller = lambda f: f()\n  File "/home/dhruv/web2py/applications/critico/controllers/default.py", line 61, in product_index\n    return getProductPage(getProductIdOf(urllib2.unquote(request.args(0))))\n  File "/home/dhruv/web2py/applications/critico/controllers/default.py", line 66, in getProductPage\n    return dict(product_info=getAuthBasedProductProfile(prodId), edition_info=getAuthBasedAllEditonForm(prodId), contrib_info=getAuthBasedAllContributorForm(prodId), news_info=getAuthBasedAllNewsForm(prodId), video_info=getAuthBasedAllVideoForm(\'product\', prodId), review_info=getAuthBasedReviewForm(\'product\', prodId))\n  File "/home/dhruv/web2py/applications/critico/controllers/default.py", line 1454, in getAuthBasedReviewForm\n    form = getAuthBasedButtonToAddReview(type_, typeId)\n  File "/home/dhruv/web2py/applications/critico/controllers/default.py", line 1451, in getAuthBasedButtonToAddReview\n    return getButtonToAddReview(type_, typeId)\n  File "/home/dhruv/web2py/applications/critico/controllers/default.py", line 1408, in getButtonToAddReview\n    addForm = getEditableReviewForm(-1, type_, typeId)\n  File "/home/dhruv/web2py/applications/critico/controllers/default.py", line 1369, in getEditableReviewForm\n    addToProductAspectsScore(normScore1)\nTypeError: addToProductAspectsScore() takes exactly 2 arguments (1 given)\n'
+p298
+s.

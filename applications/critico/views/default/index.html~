@@ -1,0 +1,5 @@
+{{left_sidebar_enabled=False,right_sidebar_enabled=False,('message' in globals())}}
+{{extend 'layout.html'}}
+
+<h3>{{=message}}</h3>
+{{=form}}

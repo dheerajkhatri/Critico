@@ -1,0 +1,360 @@
+(dp1
+S'output'
+p2
+S"<type 'exceptions.AttributeError'> 'NoneType' object has no attribute 'user'"
+p3
+sS'layer'
+p4
+S'/home/dhruv/web2py/applications/critico/controllers/default.py'
+p5
+sS'code'
+p6
+S'# -*- coding: utf-8 -*-\n# this file is released under public domain and you can use without limitations\n\n#########################################################################\n## This is a sample controller\n## - index is the default action of any application\n## - user is required for authentication and authorization\n## - download is for downloading files uploaded in the db (does streaming)\n## - api is an example of Hypermedia API support and access control\n#########################################################################\n\nINDEX_PAGE=\'index\'\nPRODUCT_PROFILE_PAGE=\'product_profile\'\nEDITION_MANAGER_PAGE=\'edition_manager\'\nEDITION_PROFILE_PAGE=\'edition_profile\'\nSUB_EDITION_PROFILE_PAGE=\'sub_edition_profile\'\nCONTRIBUTOR_MANAGER_PAGE=\'contributor_manager\'\nCONTRIBUTOR_PROFILE_PAGE=\'contributor_profile\'\n\n@auth.requires_login()\ndef index():\n    """\n    example action using the internationalization operator T and flash\n    rendered by views/default/index.html or views/generic.html\n\n    if you need a simple wiki simply replace the two lines below with:\n    return auth.wiki()\n    """\n    if not session.auth:\n        redirect(URL(\'user\'))\n    userId = session.auth.user.id\n    userType = getAuthUserType(userId)\n    if userType == \'a\':\n        return userIndex()\n    elif userType == \'b\':\n        return productIndex(userId)\n\ndef userIndex():\n    return dict(message=\'Hi user\')\n\ndef productIndex(adminId):\n    form = SQLFORM.factory(submit_button=\'Update Product Profile\')\n    if db(db.product.admin_ref == adminId).select():\n        form.add_button(\'Add/Remove/Edit Editions\', URL(EDITION_MANAGER_PAGE))\n        form.add_button(\'Add/Remove/Edit Contributors\', URL(CONTRIBUTOR_MANAGER_PAGE))\n    if form.accepts(request, session):\n        redirect(URL(PRODUCT_PROFILE_PAGE))\n    return dict(message=\'Hi Product Admin\', form=form)\n\ndef product_profile():\n    adminId = session.auth.user.id\n    prodId = getProductIdOrNewProductId(adminId)\n    return dict(form=getProductProfile(prodId))\n\ndef edition_manager():\n    adminId = session.auth.user.id\n    prodId = getProductIdOrNewProductId(adminId)\n    return dict(form=getEditionManager(prodId))\n\ndef edition_profile():\n    edId = request.vars.ed\n    adminId = session.auth.user.id\n    prodId = getProductIdOrNewProductId(adminId)\n\n    if edId == \'\':\n        edId = -1\n    else:\n        edId = int(edId)\n        if prodId != getEditionProductId(edId):\n            return\n    return dict(form=getEditionProfile(edId, prodId))\n\ndef sub_edition_profile():\n    edId = int(request.vars.ed)\n    subedId = request.vars.subed\n    adminId = session.auth.user.id\n    prodId = getProductIdOrNewProductId(adminId)\n\n    if prodId != getEditionProductId(edId):\n        return\n\n    if subedId == \'\':\n        subedId = -1\n    else:\n        subedId = int(subedId)\n        if edId != getSubEditionEditionId(subEdId):\n            return\n    return dict(form=getSubEditionProfile(subedId, edId, prodId))\n\ndef contributor_manager():\n    adminId = session.auth.user.id\n    prodId = getProductIdOrNewProductId(adminId)\n    return dict(form=getContributorManager(prodId))\n\ndef contributor_profile():\n    contribId = request.vars.contrib\n    adminId = session.auth.user.id\n    prodId = getProductIdOrNewProductId(adminId)\n    if contribId == \'\':\n        contribId = -1\n    else:\n        contribId = int(contribId)\n        if prodId != getContributorProductId(contribId):\n            return\n    return dict(form=getContributorProfile(contribId, prodId))\n\n\ndef user():\n    """\n    exposes:\n    http://..../[app]/default/user/login\n    http://..../[app]/default/user/logout\n    http://..../[app]/default/user/register\n    http://..../[app]/default/user/register_user\n    http://..../[app]/default/user/register_product_admin\n    http://..../[app]/default/user/profile\n    http://..../[app]/default/user/retrieve_password\n    http://..../[app]/default/user/change_password\n    http://..../[app]/default/user/manage_users (requires membership in\n    use @auth.requires_login()\n        @auth.requires_membership(\'group name\')\n        @auth.requires_permission(\'read\',\'table name\',record_id)\n    to decorate functions that need access control\n    """\n    if request.args(0) == \'register_user\':\n        return dict(form=getUserRegistrationForm())\n    elif request.args(0) == \'register_product_admin\':\n        return dict(form=getProductAdminRegistrationForm())\n    elif request.args(0) == \'profile\':\n        return dict(form=getProfileForm())\n    return dict(form=auth())\n\n@cache.action()\ndef download():\n    """\n    allows downloading of uploaded files\n    http://..../[app]/default/download/[filename]\n    """\n    return response.download(request, db)\n\n\ndef call():\n    """\n    exposes services. for example:\n    http://..../[app]/default/call/jsonrpc\n    decorate with @services.jsonrpc the functions to expose\n    supports xml, json, xmlrpc, jsonrpc, amfrpc, rss, csv\n    """\n    return service()\n\n\n@auth.requires_login() \ndef api():\n    """\n    this is example of API with access control\n    WEB2PY provides Hypermedia API (Collection+JSON) Experimental\n    """\n    from gluon.contrib.hypermedia import Collection\n    rules = {\n        \'<tablename>\': {\'GET\':{},\'POST\':{},\'PUT\':{},\'DELETE\':{}},\n        }\n    return Collection(db).process(request,response,rules)\n\n\'\'\'\nUser Functions\nStart\n\'\'\'\n\ndef updateAuthUserUserType(userId, userType):\n    db(db.auth_user.id == userId).update(user_type = userType)\n\ndef makeAuthUSerUser(userId):\n    updateAuthUserUserType(userId, \'a\')\n\ndef makeAuthUSerSoapAdmin(userId):\n    updateAuthUserUserType(userId, \'b\')\n\ndef approveAuthUser(userId):\n    db(db.auth_user.id == userId).update(registration_key=\'\')\n\ndef getUserRegistrationForm():\n    form = getRegistrationForm()\n    if form.accepts(request, session):\n        makeAuthUSerUser(form.vars.id)\n        approveAuthUser(form.vars.id)\n    return form\n\ndef getProductAdminRegistrationForm():\n    form = getRegistrationForm()\n    if form.accepts(request, session):\n        makeAuthUSerSoapAdmin(form.vars.id)\n        approveAuthUser(form.vars.id)   ## ------------------- This line will be removed in production\n    return form\n\ndef disalbeAuthFieldReadOrWrite(fieldList):\n    for field in fieldList:\n        db.auth_user[field].readable = db.auth_user[field].writable = False\n\ndef getRegistrationForm():\n    disalbeAuthFieldReadOrWrite([\'gender\', \'date_of_birth\', \'country\', \'state_\', \'city\', \'display_picture_name\', \'display_picture_blob\'])\n    return auth.register()\n\n@auth.requires_login()\ndef getProfileForm():\n    disalbeAuthFieldReadOrWrite([\'username\'])\n    return auth.profile()\n\ndef getAuthUserType(userId):\n    return db(db.auth_user.id == userId).select()[0].user_type\n\n\'\'\'\nUser Functions\nEnd\n\'\'\'\n\n\'\'\'\nProduct Functions\nStart\n\'\'\'\ndef insertProduct(adminId, prodName, picName, picBlob):\n    return db.product.insert(admin_ref=adminId, name=prodName, display_picture_name=picName, display_picture_blob=picBlob)\n\ndef initProduct(adminId):\n    return insertProduct(adminId, \'\', \'\', \'\')\n\ndef isProductWithThisIdExists(prodId):\n    if not db(db.edition.id == prodId).select():\n        return False\n    else:\n        return True\n\ndef selectProduct(prodId):\n    return db(db.product.id == prodId).select()\n\ndef getProductName(prodId):\n    rows = selectProduct(prodId)\n    if rows:\n        return rows[0].name\n\ndef updateProductName(prodId, name_):\n    rows = selectProduct(prodId)\n    if rows:\n        db(db.product.id == prodId).update(name=name_)\n\ndef getProductPicName(prodId):\n    rows = selectProduct(prodId)\n    if rows:\n        return rows[0].display_picture_name\n\ndef updateProductPicName(prodId, picName):\n    rows = selectProduct(prodId)\n    if rows:\n        db(db.product.id == prodId).update(display_picture_name=picName)\n\ndef getProductPicBlob(prodId):\n    rows = selectProduct(prodId)\n    if rows:\n        return rows[0].display_picture_blob\n\ndef updateProductPicBlob(prodId, picBlob):\n    rows = selectProduct(prodId)\n    if rows:\n        db(db.product.id == prodId).update(display_picture_blob=picBlob)\n\n\ndef updateProductPic(prodId, picName, picBlob):\n    db(db.product.id == prodId).update(display_picture_name=picName, display_picture_blob=picBlob)\n\ndef getProductIdOrNewProductId(adminId):\n    val = getProductWithThisAdminId(adminId)\n    if val == -1:\n        return initProduct(adminId)\n    else:\n        return val\n\ndef getProductWithThisAdminId(adminId):\n    rows = db(db.product.admin_ref == adminId).select()\n    if(not rows):\n        return -1\n    else:\n        return rows[0].id\n\ndef getProductProfile(prodId):\n    update = db.product(prodId)\n    form = SQLFORM(db.product, update, submit_button=\'Apply Changes\', showid=False, upload=URL(r=request,f=\'download\'))\n    form.add_button(\'Back\', URL(INDEX_PAGE))\n    if form.accepts(request, session):\n        redirect(URL(PRODUCT_PROFILE_PAGE))\n    return form\n\n\'\'\'\nProduct Functions\nEnd\n\'\'\'\n\n\'\'\'\nEdition Functions\nStart\n\'\'\'\n\ndef insertEdition(prodId, name_, number_, dor, desc, picName, picBlob):\n    return db.edition.insert(product_ref=prodId, name=name_, number=number_, date_of_release=dor, description=desc, display_picture_name=picName, display_picture_blob=picBlob)\n\ndef initEdition(prodId, number_, desc):\n    return insertEdition(prodId, \'\', number_, \'\', desc, \'\', \'\')\n\ndef isEditionWithThisIdExists(edId):\n    if not db(db.edition.id == edId).select():\n        return False\n    else:\n        return True\n\ndef selectEdition(edId):\n    return db(db.edition.id == edId).select()\n\ndef getEditionProductId(edId):\n    rows = selectEdition(edId)\n    if rows:\n        return rows[0].product_ref\n\ndef updateEditionProductId(edId, prodId):\n    rows = selectEdition(edId)\n    if rows:\n        db(db.edition.id == edId).update(product_ref=prodId)\n\ndef getEditionName(edId):\n    rows = selectEdition(edId)\n    if rows:\n        return rows[0].name\n\ndef updateEditionName(edId, name_):\n    rows = selectEdition(edId)\n    if rows:\n        db(db.edition.id == edId).update(name=name_)\n\ndef getEditionNumber(edId):\n    rows = selectEdition(edId)\n    if rows:\n        return rows[0].number_\n\ndef updateEditionNumber(edId, num):\n    rows = selectEdition(edId)\n    if rows:\n        db(db.edition.id == edId).update(number_=num)\n\ndef getEditionDOR(edId):\n    rows = selectEdition(edId)\n    if rows:\n        return rows[0].date_of_release\n\ndef updateEditionDOR(edId, dor):\n    rows = selectEdition(edId)\n    if rows:\n        db(db.edition.id == edId).update(date_of_release=dor)\n\ndef getEditionDesc(edId):\n    rows = selectEdition(edId)\n    if rows:\n        return rows[0].description\n\ndef updateEditionDesc(edId, desc):\n    rows = selectEdition(edId)\n    if rows:\n        db(db.edition.id == edId).update(description=desc)\n\ndef getEditionPicName(edId):\n    rows = selectEdition(edId)\n    if rows:\n        return rows[0].display_picture_name\n\ndef updateEditionPicName(edId, name_):\n    rows = selectEdition(edId)\n    if rows:\n        db(db.edition.id == edId).update(display_picture_name=name_)\n\ndef getEditionPicBlob(edId):\n    rows = selectEdition(edId)\n    if rows:\n        return rows[0].display_picture_blob\n\ndef updateEditionPicBlob(edId, picBlob):\n    rows = selectEdition(edId)\n    if rows:\n        db(db.edition.id == edId).update(display_picture_blob=blob)\n\n## Returns listof  editions if exists else -1\ndef getEditionsWithThisProductId(prodId):\n    rows = db(db.edition.product_ref == prodId).select()\n    if(not rows):\n        return -1\n    else:\n        return rows\n\ndef getEditionManager(prodId):\n    form = SQLFORM.factory(submit_button=\'Add Edition\')\n    form.add_button(\'Back\', URL(INDEX_PAGE))\n    rows = db(db.edition.product_ref == prodId).select()\n    for row in rows:\n        str_=(\'Edit Edition #\' + str(row.number_))\n        form.add_button(str_, URL(EDITION_PROFILE_PAGE, vars=dict(ed=str(row.id))))\n    if form.accepts(request, session):\n        redirect(URL(EDITION_PROFILE_PAGE, vars=dict(ed=\'\')))\n    return form\n\ndef getEditionProfile(edId, prodId):\n    update = db.edition(edId)\n    form = SQLFORM(db.edition, update, deletable=True, showid=False, submit_button=\'Apply Changes\', upload=URL(r=request,f=\'download\'))\n    form.add_button(\'Back\', URL(EDITION_MANAGER_PAGE))\n\n    ## for sub editions\n    rows = db(db.sub_edition.edition_ref == edId).select()\n    for row in rows:\n        str_=(\'Edit Sub Edition #\' + str(row.number_))\n        form.add_button(str_, URL(SUB_EDITION_PROFILE_PAGE, vars=dict(ed=str(edId), subed=str(row.id))))\n    if isEditionWithThisIdExists(edId):\n        form.add_button(\'Add sub edition\', URL(SUB_EDITION_PROFILE_PAGE, vars=dict(ed=str(edId), subed=\'\')))\n    ## -----\n    if form.accepts(request, session):\n        updateEditionProductId(form.vars.id, prodId)\n        if form.deleted:\n            redirect(URL(EDITION_MANAGER_PAGE))\n        else:\n            redirect(URL(EDITION_PROFILE_PAGE,  vars=dict(ed=str(form.vars.id))))\n    return form\n\n\'\'\'\nEdition Functions\nEnd\n\'\'\'\n\n\'\'\'\nSub Edition Functions\nStart\n\'\'\'\ndef insertSubEdition(prodId, edId, name_, number_, dor, desc, picName, picBlob):\n    return db.sub_edition.insert(product_ref=prodId, edition_ref=edId, name=name_, number=number_, date_of_release=dor, description=desc, display_picture_name=picName, display_picture_blob=picBlob)\n\ndef initSubEdition(prodId, edId, number_, desc):\n    return insertSubEdition(prodId, edId, \'\', number_, \'\', desc, \'\', \'\')\n\ndef isSubEditionWithThisIdExists(subEdId):\n    if not db(db.sub_edition.id == subEdId).select():\n        return False\n    else:\n        return True\n\ndef selectSubEdition(subEdId):\n    return db(db.sub_edition.id == subEdId).select()\n\ndef getSubEditionEditionId(subEdId):\n    rows = selectSubEdition(subEdId)\n    if rows:\n        return rows[0].edition_ref\n\ndef updateSubEditionEditionId(subEdId, edId):\n    rows = selectSubEdition(subEdId)\n    if rows:\n        db(db.sub_edition.id == subEdId).update(edition_ref=edId)\n\ndef getSubEditionProductId(subEdId):\n    rows = selectSubEdition(subEdId)\n    if rows:\n        return rows[0].product_ref\n\ndef updateSubEditionProductId(subEdId, prodId):\n    rows = selectSubEdition(subEdId)\n    if rows:\n        db(db.sub_edition.id == subEdId).update(product_ref=prodId)\n\ndef getSubEditionName(subEdId):\n    rows = selectSubEdition(subEdId)\n    if rows:\n        return rows[0].name\n\ndef updateSubEditionName(subEdId, name_):\n    rows = selectSubEdition(subEdId)\n    if rows:\n        db(db.sub_edition.id == subEdId).update(name=name_)\n\ndef getSubEditionNumber(subEdId):\n    rows = selectSubEdition(subEdId)\n    if rows:\n        return rows[0].number_\n\ndef updateSubEditionNumber(subEdId, num):\n    rows = selectSubEdition(subEdId)\n    if rows:\n        db(db.sub_edition.id == subEdId).update(number_=num)\n\ndef getSubEditionDOR(subEdId):\n    rows = selectSubEdition(subEdId)\n    if rows:\n        return rows[0].date_of_release\n\ndef updateSubEditionDOR(subEdId, dor):\n    rows = selectSubEdition(subEdId)\n    if rows:\n        db(db.sub_edition.id == subEdId).update(date_of_release=dor)\n\ndef getSubEditionDesc(subEdId):\n    rows = selectSubEdition(subEdId)\n    if rows:\n        return rows[0].description\n\ndef updateSubEditionDesc(subEdId, desc):\n    rows = selectSubEdition(subEdId)\n    if rows:\n        db(db.sub_edition.id == subEdId).update(description=desc)\n\ndef getSubEditionPicName(subEdId):\n    rows = selectSubEdition(subEdId)\n    if rows:\n        return rows[0].display_picture_name\n\ndef updateSubEditionPicName(subEdId, name_):\n    rows = selectSubEdition(subEdId)\n    if rows:\n        db(db.sub_edition.id == subEdId).update(display_picture_name=name_)\n\ndef getSubEditionPicBlob(subEdId):\n    rows = selectSubEdition(subEdId)\n    if rows:\n        return rows[0].display_picture_blob\n\ndef updateSubEditionPicBlob(subEdId, picBlob):\n    rows = selectSubEdition(subEdId)\n    if rows:\n        db(db.sub_edition.id == subEdId).update(display_picture_blob=blob)\n\n## Returns list of sub editions if exists else -1\ndef getSubEditionsWithThisEditionId(edId):\n    rows = db(db.sub_edition.edition_ref == edId).select()\n    if(not rows):\n        return -1\n    else:\n        return rows\n\ndef getSubEditionProfile(contribId, edId, prodId):\n    update = db.sub_edition(contribId)\n    form = SQLFORM(db.sub_edition, update, deletable=True, showid=False, submit_button=\'Apply Changes\', upload=URL(r=request,f=\'download\'))\n    form.add_button(\'Back\', URL(EDITION_PROFILE_PAGE,  vars=dict(ed=str(edId))))\n\n    ## for videos\n    \'\'\'\n    rows = db(db.sub_edition.product_ref == edId).select()\n    for row in rows:\n        str_=(\'Edit Sub Edition #\' + str(row.number_))\n        form.add_button(str_, URL(SUB_EDITION_PROFILE_PAGE, vars=dict(ed=str(edId), subed=str(row.id))))\n    if isEditionWithThisIdExists(edId):\n        form.add_button(\'Add sub edition\', URL(SUB_EDITION_PROFILE_PAGE, vars=dict(ed=str(edId), subed=\'\')))\n    \'\'\'\n    ## -----\n    if form.accepts(request, session):\n        if form.deleted:\n            redirect(URL(EDITION_PROFILE_PAGE, vars=dict(ed=str(edId))))\n        else:\n            updateSubEditionProductId(form.vars.id, prodId)\n            updateSubEditionEditionId(form.vars.id, edId)\n            redirect(URL(SUB_EDITION_PROFILE_PAGE,  vars=dict(subed=str(form.vars.id),ed=str(edId))))\n    return form\n\n\n\'\'\'\nSub Edition Functions\nEnd\n\'\'\'\n\n\'\'\'\nContributor Functions\nStart\n\'\'\'\ndef insertContributor(prodId, name_1, name_2, role_, url_, picName, picBlob):\n    return db.contributor.insert(product_ref=prodId, real_name=name_1, character_name=name_2, role=role_, url=url_, display_picture_name=picName, display_picture_blob=picBlob)\n\ndef initContributor(prodId, number_, desc):\n    return insertContributor(prodId, \'\', number_, \'\', desc, \'\', \'\')\n\ndef isContributorWithThisIdExists(contribId):\n    if not db(db.contributor.id == contribId).select():\n        return False\n    else:\n        return True\n\ndef selectContributor(contribId):\n    return db(db.contributor.id == contribId).select()\n\ndef getContributorProductId(contribId):\n    rows = selectContributor(contribId)\n    if rows:\n        return rows[0].product_ref\n\ndef updateContributorProductId(contribId, prodId):\n    rows = selectContributor(contribId)\n    if rows:\n        db(db.contributor.id == contribId).update(product_ref=prodId)\n\ndef getContributorRealName(contribId):\n    rows = selectContributor(contribId)\n    if rows:\n        return rows[0].real_name\n\ndef updateContributorRealName(contribId, name_):\n    rows = selectContributor(contribId)\n    if rows:\n        db(db.contributor.id == contribId).update(real_name=name_)\n\ndef getContributorCharacterName(contribId):\n    rows = selectContributor(contribId)\n    if rows:\n        return rows[0].character_name\n\ndef updateContributorCharacterName(contribId, name_):\n    rows = selectContributor(contribId)\n    if rows:\n        db(db.contributor.id == contribId).update(character_name=name_)\n\ndef getContributorRole(contribId):\n    rows = selectContributor(contribId)\n    if rows:\n        return rows[0].role\n\ndef updateContributorRole(contribId, role_):\n    rows = selectContributor(contribId)\n    if rows:\n        db(db.contributor.id == contribId).update(role=role_)\n\n\ndef getContributorURL(contribId):\n    rows = selectContributor(contribId)\n    if rows:\n        return rows[0].url\n\ndef updateContributorURL(contribId, url_):\n    rows = selectContributor(contribId)\n    if rows:\n        db(db.contributor.id == contribId).update(url=url_)\n\ndef getContributorPicName(contribId):\n    rows = selectContributor(contribId)\n    if rows:\n        return rows[0].display_picture_name\n\ndef updateContributorPicName(contribId, name_):\n    rows = selectContributor(contribId)\n    if rows:\n        db(db.contributor.id == contribId).update(display_picture_name=name_)\n\ndef getContributorPicBlob(contribId):\n    rows = selectContributor(contribId)\n    if rows:\n        return rows[0].display_picture_blob\n\ndef updateContributorPicBlob(contribId, picBlob):\n    rows = selectContributor(contribId)\n    if rows:\n        db(db.contributor.id == contribId).update(display_picture_blob=blob)\n\n## Returns list of sub editions if exists else -1\ndef getContributorsWithThisProductId(contribId):\n    rows = db(db.contributor.edition_ref == contribId).select()\n    if(not rows):\n        return -1\n    else:\n        return rows\n\ndef getContributorManager(prodId):\n    form = SQLFORM.factory(submit_button=\'Add Contributor\')\n    form.add_button(\'Back\', URL(INDEX_PAGE))\n    rows = db(db.contributor.product_ref == prodId).select()\n    for row in rows:\n        str_=(\'Edit Contributor Profile: \' + str(row.real_name))\n        form.add_button(str_, URL(CONTRIBUTOR_PROFILE_PAGE, vars=dict(contrib=str(row.id))))\n    if form.accepts(request, session):\n        redirect(URL(CONTRIBUTOR_PROFILE_PAGE, vars=dict(contrib=\'\')))\n    return form\n\ndef getContributorProfile(contribId, prodId):\n    update = db.contributor(contribId)\n    form = SQLFORM(db.contributor, update, deletable=True, showid=False, submit_button=\'Apply Changes\', upload=URL(r=request,f=\'download\'))\n    form.add_button(\'Back\', URL(CONTRIBUTOR_MANAGER_PAGE))\n    if form.accepts(request, session):\n        updateContributorProductId(form.vars.id, prodId)\n        if form.deleted:\n            redirect(URL(CONTRIBUTOR_MANAGER_PAGE))\n        else:\n            redirect(URL(CONTRIBUTOR_PROFILE_PAGE,  vars=dict(contrib=str(form.vars.id))))\n    return form\n\n\n\n\'\'\'\nContributor Functions\nEnd\n\'\'\'\n\n\nresponse._vars=response._caller(contributor_manager)\n'
+p7
+sS'snapshot'
+p8
+(dp9
+S'exception'
+p10
+(dp11
+S'__hash__'
+p12
+S"<method-wrapper '__hash__' of exceptions.AttributeError object>"
+p13
+sS'__setattr__'
+p14
+S"<method-wrapper '__setattr__' of exceptions.AttributeError object>"
+p15
+sS'__reduce_ex__'
+p16
+S'<built-in method __reduce_ex__ of exceptions.AttributeError object>'
+p17
+sS'__getslice__'
+p18
+S"<method-wrapper '__getslice__' of exceptions.AttributeError object>"
+p19
+sS'__getitem__'
+p20
+S"<method-wrapper '__getitem__' of exceptions.AttributeError object>"
+p21
+sS'__setstate__'
+p22
+S'<built-in method __setstate__ of exceptions.AttributeError object>'
+p23
+sS'args'
+p24
+S'("\'NoneType\' object has no attribute \'user\'",)'
+p25
+sS'__reduce__'
+p26
+S'<built-in method __reduce__ of exceptions.AttributeError object>'
+p27
+sS'__str__'
+p28
+S"<method-wrapper '__str__' of exceptions.AttributeError object>"
+p29
+sS'__format__'
+p30
+S'<built-in method __format__ of exceptions.AttributeError object>'
+p31
+sS'__getattribute__'
+p32
+S"<method-wrapper '__getattribute__' of exceptions.AttributeError object>"
+p33
+sS'__class__'
+p34
+S"<type 'exceptions.AttributeError'>"
+p35
+sS'__unicode__'
+p36
+S'<built-in method __unicode__ of exceptions.AttributeError object>'
+p37
+sS'__delattr__'
+p38
+S"<method-wrapper '__delattr__' of exceptions.AttributeError object>"
+p39
+sS'__subclasshook__'
+p40
+S'<built-in method __subclasshook__ of type object>'
+p41
+sS'__repr__'
+p42
+S"<method-wrapper '__repr__' of exceptions.AttributeError object>"
+p43
+sS'__dict__'
+p44
+S'{}'
+p45
+sS'__sizeof__'
+p46
+S'<built-in method __sizeof__ of exceptions.AttributeError object>'
+p47
+sS'__doc__'
+p48
+S"'Attribute not found.'"
+p49
+sS'__init__'
+p50
+S"<method-wrapper '__init__' of exceptions.AttributeError object>"
+p51
+sS'__new__'
+p52
+S'<built-in method __new__ of type object>'
+p53
+ssS'evalue'
+p54
+S"'NoneType' object has no attribute 'user'"
+p55
+sS'request'
+p56
+cgluon.html
+XML_unpickle
+p57
+(S's\xf5`\x00\x00<div><table><tr><td style="font-weight:bold;vertical-align:top;">ajax</td><td style="vertical-align:top;">:</td><td><div>False</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">application</td><td style="vertical-align:top;">:</td><td><div>critico</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">args</td><td style="vertical-align:top;">:</td><td><div><table></table></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">cid</td><td style="vertical-align:top;">:</td><td><div>None</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">client</td><td style="vertical-align:top;">:</td><td><div>127.0.0.1</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">controller</td><td style="vertical-align:top;">:</td><td><div>default</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">cookies</td><td style="vertical-align:top;">:</td><td><div><table><tr><td style="font-weight:bold;vertical-align:top;">session_id_admin</td><td style="vertical-align:top;">:</td><td><div>127.0.0.1-05ed102d-3ffa-437e-9a15-56a543746e13<table><tr><td style="font-weight:bold;vertical-align:top;">comment</td><td style="vertical-align:top;">:</td><td><div></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">domain</td><td style="vertical-align:top;">:</td><td><div></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">expires</td><td style="vertical-align:top;">:</td><td><div></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">httponly</td><td style="vertical-align:top;">:</td><td><div></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">max-age</td><td style="vertical-align:top;">:</td><td><div></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">path</td><td style="vertical-align:top;">:</td><td><div></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">secure</td><td style="vertical-align:top;">:</td><td><div></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">version</td><td style="vertical-align:top;">:</td><td><div></div></td></tr></table></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">session_id_critico</td><td style="vertical-align:top;">:</td><td><div>127.0.0.1-281ae361-6871-413d-a698-162ab022e72a<table><tr><td style="font-weight:bold;vertical-align:top;">comment</td><td style="vertical-align:top;">:</td><td><div></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">domain</td><td style="vertical-align:top;">:</td><td><div></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">expires</td><td style="vertical-align:top;">:</td><td><div></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">httponly</td><td style="vertical-align:top;">:</td><td><div></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">max-age</td><td style="vertical-align:top;">:</td><td><div></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">path</td><td style="vertical-align:top;">:</td><td><div></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">secure</td><td style="vertical-align:top;">:</td><td><div></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">version</td><td style="vertical-align:top;">:</td><td><div></div></td></tr></table></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">session_id_sample_app</td><td style="vertical-align:top;">:</td><td><div>127.0.0.1-0d057cb9-cdf5-4682-b07b-898dc068f898<table><tr><td style="font-weight:bold;vertical-align:top;">comment</td><td style="vertical-align:top;">:</td><td><div></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">domain</td><td style="vertical-align:top;">:</td><td><div></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">expires</td><td style="vertical-align:top;">:</td><td><div></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">httponly</td><td style="vertical-align:top;">:</td><td><div></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">max-age</td><td style="vertical-align:top;">:</td><td><div></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">path</td><td style="vertical-align:top;">:</td><td><div></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">secure</td><td style="vertical-align:top;">:</td><td><div></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">version</td><td style="vertical-align:top;">:</td><td><div></div></td></tr></table></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">session_id_soapcharts</td><td style="vertical-align:top;">:</td><td><div>127.0.0.1-9d21a5b9-a60d-4b30-8745-96479721b4e5<table><tr><td style="font-weight:bold;vertical-align:top;">comment</td><td style="vertical-align:top;">:</td><td><div></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">domain</td><td style="vertical-align:top;">:</td><td><div></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">expires</td><td style="vertical-align:top;">:</td><td><div></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">httponly</td><td style="vertical-align:top;">:</td><td><div></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">max-age</td><td style="vertical-align:top;">:</td><td><div></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">path</td><td style="vertical-align:top;">:</td><td><div></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">secure</td><td style="vertical-align:top;">:</td><td><div></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">version</td><td style="vertical-align:top;">:</td><td><div></div></td></tr></table></div></td></tr></table></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">env</td><td style="vertical-align:top;">:</td><td><div><table><tr><td style="font-weight:bold;vertical-align:top;">HTTP_ACCEPT</td><td style="vertical-align:top;">:</td><td><div>text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">HTTP_ACCEPT_ENCODING</td><td style="vertical-align:top;">:</td><td><div>gzip, deflate, sdch</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">HTTP_ACCEPT_LANGUAGE</td><td style="vertical-align:top;">:</td><td><div>en-US,en;q=0.8</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">HTTP_CONNECTION</td><td style="vertical-align:top;">:</td><td><div>keep-alive</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">HTTP_COOKIE</td><td style="vertical-align:top;">:</td><td><div>session_id_soapcharts=127.0.0.1-9d21a5b9-a60d-4b30-8745-96479721b4e5; session_id_sample_app=127.0.0.1-0d057cb9-cdf5-4682-b07b-898dc068f898; session_id_admin=127.0.0.1-05ed102d-3ffa-437e-9a15-56a543746e13; session_id_critico=127.0.0.1-281ae361-6871-413d-a698-162ab022e72a</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">HTTP_HOST</td><td style="vertical-align:top;">:</td><td><div>127.0.0.1:8000</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">HTTP_REFERER</td><td style="vertical-align:top;">:</td><td><div>http://127.0.0.1:8000/critico/default/contributor_profile?contrib=</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">HTTP_USER_AGENT</td><td style="vertical-align:top;">:</td><td><div>Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/40.0.2214.115 Safari/537.36</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">PATH_INFO</td><td style="vertical-align:top;">:</td><td><div>/critico/default/contributor_manager</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">QUERY_STRING</td><td style="vertical-align:top;">:</td><td><div></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">REMOTE_ADDR</td><td style="vertical-align:top;">:</td><td><div>127.0.0.1</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">REMOTE_PORT</td><td style="vertical-align:top;">:</td><td><div>45092</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">REQUEST_METHOD</td><td style="vertical-align:top;">:</td><td><div>GET</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">SCRIPT_NAME</td><td style="vertical-align:top;">:</td><td><div></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">SERVER_NAME</td><td style="vertical-align:top;">:</td><td><div>dhruv-Lenovo-Y50-70</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">SERVER_PORT</td><td style="vertical-align:top;">:</td><td><div>8000</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">SERVER_PROTOCOL</td><td style="vertical-align:top;">:</td><td><div>HTTP/1.1</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">SERVER_SOFTWARE</td><td style="vertical-align:top;">:</td><td><div>Rocket 1.2.6</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">app_folders</td><td style="vertical-align:top;">:</td><td><div>set([&#x27;/home/dhruv/web2py/applications/critico/&#x27;, &#x27;/home/dhruv/web2py/applications/admin/&#x27;, &#x27;/home/dhruv/web2py/applications/sample_app/&#x27;])</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">applications_parent</td><td style="vertical-align:top;">:</td><td><div>/home/dhruv/web2py</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">cmd_args</td><td style="vertical-align:top;">:</td><td><div><table></table></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">cmd_options</td><td style="vertical-align:top;">:</td><td><div>&lt;Values at 0x7f8ac9d4bf80: {&#x27;verbose&#x27;: False, &#x27;ip&#x27;: &#x27;127.0.0.1&#x27;, &#x27;debuglevel&#x27;: 30, &#x27;with_scheduler&#x27;: False, &#x27;ips&#x27;: [&#x27;127.0.1.1&#x27;], &#x27;shutdown_timeout&#x27;: 5, &#x27;taskbar&#x27;: False, &#x27;with_coverage&#x27;: False, &#x27;scheduler_groups&#x27;: None, &#x27;port&#x27;: 8000, &#x27;maxthreads&#x27;: None, &#x27;softcron&#x27;: False, &#x27;server_name&#x27;: &#x27;dhruv-Lenovo-Y50-70&#x27;, &#x27;bpython&#x27;: False, &#x27;nogui&#x27;: False, &#x27;pid_filename&#x27;: &#x27;httpserver.pid&#x27;, &#x27;extcron&#x27;: False, &#x27;runcron&#x27;: False, &#x27;run_system_tests&#x27;: False, &#x27;test&#x27;: None, &#x27;folder&#x27;: &#x27;/home/dhruv/web2py&#x27;, &#x27;config&#x27;: &#x27;&#x27;, &#x27;minthreads&#x27;: None, &#x27;shell&#x27;: None, &#x27;run&#x27;: &#x27;&#x27;, &#x27;log_filename&#x27;: &#x27;httpserver.log&#x27;, &#x27;profiler_dir&#x27;: None, &#x27;args&#x27;: [&#x27;&#x27;], &#x27;socket_timeout&#x27;: 5, &#x27;ssl_ca_certificate&#x27;: None, &#x27;scheduler&#x27;: None, &#x27;interfaces&#x27;: None, &#x27;ssl_private_key&#x27;: &#x27;&#x27;, &#x27;gae&#x27;: None, &#x27;password&#x27;: &#x27;&lt;ask&gt;&#x27;, &#x27;request_queue_size&#x27;: 5, &#x27;ssl_certificate&#x27;: &#x27;&#x27;, &#x27;cronjob&#x27;: False, &#x27;numthreads&#x27;: None, &#x27;quiet&#x27;: False, &#x27;import_models&#x27;: False, &#x27;timeout&#x27;: 10, &#x27;plain&#x27;: False, &#x27;nobanner&#x27;: False}&gt;</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">db_sessions</td><td style="vertical-align:top;">:</td><td><div>set([])</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">debugging</td><td style="vertical-align:top;">:</td><td><div>False</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">gluon_parent</td><td style="vertical-align:top;">:</td><td><div>/home/dhruv/web2py</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">http_accept</td><td style="vertical-align:top;">:</td><td><div>text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">http_accept_encoding</td><td style="vertical-align:top;">:</td><td><div>gzip, deflate, sdch</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">http_accept_language</td><td style="vertical-align:top;">:</td><td><div>en-US,en;q=0.8</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">http_connection</td><td style="vertical-align:top;">:</td><td><div>keep-alive</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">http_cookie</td><td style="vertical-align:top;">:</td><td><div>session_id_soapcharts=127.0.0.1-9d21a5b9-a60d-4b30-8745-96479721b4e5; session_id_sample_app=127.0.0.1-0d057cb9-cdf5-4682-b07b-898dc068f898; session_id_admin=127.0.0.1-05ed102d-3ffa-437e-9a15-56a543746e13; session_id_critico=127.0.0.1-281ae361-6871-413d-a698-162ab022e72a</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">http_host</td><td style="vertical-align:top;">:</td><td><div>127.0.0.1:8000</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">http_referer</td><td style="vertical-align:top;">:</td><td><div>http://127.0.0.1:8000/critico/default/contributor_profile?contrib=</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">http_user_agent</td><td style="vertical-align:top;">:</td><td><div>Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/40.0.2214.115 Safari/537.36</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">is_jython</td><td style="vertical-align:top;">:</td><td><div>False</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">is_pypy</td><td style="vertical-align:top;">:</td><td><div>False</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">is_source</td><td style="vertical-align:top;">:</td><td><div>True</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">local_hosts</td><td style="vertical-align:top;">:</td><td><div><table><tr><td><div>::1</div></td></tr><tr><td><div>127.0.1.1</div></td></tr><tr><td><div>::ffff:127.0.0.1</div></td></tr><tr><td><div>127.0.0.1</div></td></tr><tr><td><div>dhruv-Lenovo-Y50-70</div></td></tr></table></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">path_info</td><td style="vertical-align:top;">:</td><td><div>/critico/default/contributor_manager</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">query_string</td><td style="vertical-align:top;">:</td><td><div></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">remote_addr</td><td style="vertical-align:top;">:</td><td><div>127.0.0.1</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">remote_port</td><td style="vertical-align:top;">:</td><td><div>45092</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">request_method</td><td style="vertical-align:top;">:</td><td><div>GET</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">request_uri</td><td style="vertical-align:top;">:</td><td><div>/critico/default/contributor_manager</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">script_name</td><td style="vertical-align:top;">:</td><td><div></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">server_name</td><td style="vertical-align:top;">:</td><td><div>dhruv-Lenovo-Y50-70</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">server_port</td><td style="vertical-align:top;">:</td><td><div>8000</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">server_protocol</td><td style="vertical-align:top;">:</td><td><div>HTTP/1.1</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">server_software</td><td style="vertical-align:top;">:</td><td><div>Rocket 1.2.6</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">web2py_path</td><td style="vertical-align:top;">:</td><td><div>/home/dhruv/web2py</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">web2py_version</td><td style="vertical-align:top;">:</td><td><div>2.9.12-stable+timestamp.2015.01.17.06.11.03</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">wsgi.errors</td><td style="vertical-align:top;">:</td><td><div>&lt;open file &#x27;&lt;stderr&gt;&#x27;, mode &#x27;w&#x27; at 0x7f8ad0d6e1e0&gt;</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">wsgi.file_wrapper</td><td style="vertical-align:top;">:</td><td><div>&lt;class wsgiref.util.FileWrapper at 0x7f8ac9fea258&gt;</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">wsgi.input</td><td style="vertical-align:top;">:</td><td><div>&lt;socket._fileobject object at 0x7f8ac02b03d0&gt;</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">wsgi.multiprocess</td><td style="vertical-align:top;">:</td><td><div>False</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">wsgi.multithread</td><td style="vertical-align:top;">:</td><td><div>True</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">wsgi.run_once</td><td style="vertical-align:top;">:</td><td><div>False</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">wsgi.url_scheme</td><td style="vertical-align:top;">:</td><td><div>http</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">wsgi.version</td><td style="vertical-align:top;">:</td><td><div><table><tr><td><div>1</div></td></tr><tr><td><div>0</div></td></tr></table></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">wsgi_errors</td><td style="vertical-align:top;">:</td><td><div>&lt;open file &#x27;&lt;stderr&gt;&#x27;, mode &#x27;w&#x27; at 0x7f8ad0d6e1e0&gt;</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">wsgi_file_wrapper</td><td style="vertical-align:top;">:</td><td><div>&lt;class wsgiref.util.FileWrapper at 0x7f8ac9fea258&gt;</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">wsgi_input</td><td style="vertical-align:top;">:</td><td><div>&lt;socket._fileobject object at 0x7f8ac02b03d0&gt;</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">wsgi_multiprocess</td><td style="vertical-align:top;">:</td><td><div>False</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">wsgi_multithread</td><td style="vertical-align:top;">:</td><td><div>True</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">wsgi_run_once</td><td style="vertical-align:top;">:</td><td><div>False</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">wsgi_url_scheme</td><td style="vertical-align:top;">:</td><td><div>http</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">wsgi_version</td><td style="vertical-align:top;">:</td><td><div><table><tr><td><div>1</div></td></tr><tr><td><div>0</div></td></tr></table></div></td></tr></table></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">extension</td><td style="vertical-align:top;">:</td><td><div>html</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">folder</td><td style="vertical-align:top;">:</td><td><div>/home/dhruv/web2py/applications/critico/</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">function</td><td style="vertical-align:top;">:</td><td><div>contributor_manager</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">global_settings</td><td style="vertical-align:top;">:</td><td><div><table><tr><td style="font-weight:bold;vertical-align:top;">app_folders</td><td style="vertical-align:top;">:</td><td><div>set([&#x27;/home/dhruv/web2py/applications/critico/&#x27;, &#x27;/home/dhruv/web2py/applications/admin/&#x27;, &#x27;/home/dhruv/web2py/applications/sample_app/&#x27;])</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">applications_parent</td><td style="vertical-align:top;">:</td><td><div>/home/dhruv/web2py</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">cmd_args</td><td style="vertical-align:top;">:</td><td><div><table></table></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">cmd_options</td><td style="vertical-align:top;">:</td><td><div>&lt;Values at 0x7f8ac9d4bf80: {&#x27;verbose&#x27;: False, &#x27;ip&#x27;: &#x27;127.0.0.1&#x27;, &#x27;debuglevel&#x27;: 30, &#x27;with_scheduler&#x27;: False, &#x27;ips&#x27;: [&#x27;127.0.1.1&#x27;], &#x27;shutdown_timeout&#x27;: 5, &#x27;taskbar&#x27;: False, &#x27;with_coverage&#x27;: False, &#x27;scheduler_groups&#x27;: None, &#x27;port&#x27;: 8000, &#x27;maxthreads&#x27;: None, &#x27;softcron&#x27;: False, &#x27;server_name&#x27;: &#x27;dhruv-Lenovo-Y50-70&#x27;, &#x27;bpython&#x27;: False, &#x27;nogui&#x27;: False, &#x27;pid_filename&#x27;: &#x27;httpserver.pid&#x27;, &#x27;extcron&#x27;: False, &#x27;runcron&#x27;: False, &#x27;run_system_tests&#x27;: False, &#x27;test&#x27;: None, &#x27;folder&#x27;: &#x27;/home/dhruv/web2py&#x27;, &#x27;config&#x27;: &#x27;&#x27;, &#x27;minthreads&#x27;: None, &#x27;shell&#x27;: None, &#x27;run&#x27;: &#x27;&#x27;, &#x27;log_filename&#x27;: &#x27;httpserver.log&#x27;, &#x27;profiler_dir&#x27;: None, &#x27;args&#x27;: [&#x27;&#x27;], &#x27;socket_timeout&#x27;: 5, &#x27;ssl_ca_certificate&#x27;: None, &#x27;scheduler&#x27;: None, &#x27;interfaces&#x27;: None, &#x27;ssl_private_key&#x27;: &#x27;&#x27;, &#x27;gae&#x27;: None, &#x27;password&#x27;: &#x27;&lt;ask&gt;&#x27;, &#x27;request_queue_size&#x27;: 5, &#x27;ssl_certificate&#x27;: &#x27;&#x27;, &#x27;cronjob&#x27;: False, &#x27;numthreads&#x27;: None, &#x27;quiet&#x27;: False, &#x27;import_models&#x27;: False, &#x27;timeout&#x27;: 10, &#x27;plain&#x27;: False, &#x27;nobanner&#x27;: False}&gt;</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">db_sessions</td><td style="vertical-align:top;">:</td><td><div>set([])</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">debugging</td><td style="vertical-align:top;">:</td><td><div>False</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">gluon_parent</td><td style="vertical-align:top;">:</td><td><div>/home/dhruv/web2py</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">is_jython</td><td style="vertical-align:top;">:</td><td><div>False</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">is_pypy</td><td style="vertical-align:top;">:</td><td><div>False</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">is_source</td><td style="vertical-align:top;">:</td><td><div>True</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">local_hosts</td><td style="vertical-align:top;">:</td><td><div><table><tr><td><div>::1</div></td></tr><tr><td><div>127.0.1.1</div></td></tr><tr><td><div>::ffff:127.0.0.1</div></td></tr><tr><td><div>127.0.0.1</div></td></tr><tr><td><div>dhruv-Lenovo-Y50-70</div></td></tr></table></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">web2py_version</td><td style="vertical-align:top;">:</td><td><div>2.9.12-stable+timestamp.2015.01.17.06.11.03</div></td></tr></table></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">is_https</td><td style="vertical-align:top;">:</td><td><div>False</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">is_local</td><td style="vertical-align:top;">:</td><td><div>True</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">is_restful</td><td style="vertical-align:top;">:</td><td><div>False</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">is_sheduler</td><td style="vertical-align:top;">:</td><td><div>None</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">is_shell</td><td style="vertical-align:top;">:</td><td><div>None</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">now</td><td style="vertical-align:top;">:</td><td><div>datetime.datetime(2015, 4, 3, 11, 39, 56, 115754)</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">raw_args</td><td style="vertical-align:top;">:</td><td><div></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">raw_extension</td><td style="vertical-align:top;">:</td><td><div>None</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">url</td><td style="vertical-align:top;">:</td><td><div>/critico/default/contributor_manager</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">utcnow</td><td style="vertical-align:top;">:</td><td><div>datetime.datetime(2015, 4, 3, 6, 9, 56, 115800)</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">uuid</td><td style="vertical-align:top;">:</td><td><div>critico/127.0.0.1.2015-04-03.11-39-56.87300b44-1ccc-489a-a667-90775e2c9416</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">wsgi</td><td style="vertical-align:top;">:</td><td><div>&lt;gluon.main.LazyWSGI object at 0x7f8ac035dc90&gt;</div></td></tr></table></div>'
+tRp58
+sS'frames'
+p59
+(lp60
+(dp61
+S'file'
+p62
+S'/home/dhruv/web2py/gluon/restricted.py'
+p63
+sS'dump'
+p64
+(dp65
+S'environment'
+p66
+S"{'A': <class 'gluon.html.A'>, 'ANY_OF': <class 'gluon.validators.ANY_OF'>, 'ASSIGNJS': <function ASSIGNJS>, 'Auth': <class 'gluon.tools.Auth'>, 'B': <class 'gluon.html.B'>, 'BEAUTIFY': <class 'gluon.html.BEAUTIFY'>, 'BODY': <class 'gluon.html.BODY'>, 'BR': <class 'gluon.html.BR'>, 'BUTTON': <class 'gluon.html.BUTTON'>, 'CAT': <class 'gluon.html.CAT'>, ...}"
+p67
+sS'ccode'
+p68
+S'<code object <module> at 0x7f8ac02c24b0, file "/...cations/critico/controllers/default.py", line 12>'
+p69
+ssS'lnum'
+p70
+I224
+sS'lines'
+p71
+(dp72
+I224
+S'        exec ccode in environment'
+p73
+sI225
+S'    except HTTP:'
+p74
+sI226
+S'        raise'
+p75
+sI227
+S'    except RestrictedError:'
+p76
+sI228
+S'        # do not encapsulate (obfuscate) the original RestrictedError'
+p77
+sI219
+S'    try:'
+p78
+sI220
+S'        if isinstance(code, types.CodeType):'
+p79
+sI221
+S'            ccode = code'
+p80
+sI222
+S'        else:'
+p81
+sI223
+S'            ccode = compile2(code, layer)'
+p82
+ssS'call'
+p83
+S"(code='# -*- coding: utf-8 -*-\\n# this file is released ...onse._vars=response._caller(contributor_manager)\\n', environment={'A': <class 'gluon.html.A'>, 'ANY_OF': <class 'gluon.validators.ANY_OF'>, 'ASSIGNJS': <function ASSIGNJS>, 'Auth': <class 'gluon.tools.Auth'>, 'B': <class 'gluon.html.B'>, 'BEAUTIFY': <class 'gluon.html.BEAUTIFY'>, 'BODY': <class 'gluon.html.BODY'>, 'BR': <class 'gluon.html.BR'>, 'BUTTON': <class 'gluon.html.BUTTON'>, 'CAT': <class 'gluon.html.CAT'>, ...}, layer='/home/dhruv/web2py/applications/critico/controllers/default.py')"
+p84
+sS'func'
+p85
+S'restricted'
+p86
+sa(dp87
+g62
+S'/home/dhruv/web2py/applications/critico/controllers/default.py'
+p88
+sg64
+(dp89
+sg70
+I697
+sg71
+(dp90
+I686
+S'            redirect(URL(CONTRIBUTOR_PROFILE_PAGE,  vars=dict(contrib=str(form.vars.id))))'
+p91
+sI687
+S'    return form'
+p92
+sI688
+S''
+sI689
+S''
+sI690
+S''
+sI691
+S"'''"
+p93
+sI692
+S'Contributor Functions'
+p94
+sI693
+S'End'
+p95
+sI694
+S"'''"
+p96
+sI695
+S''
+ssg83
+S'()'
+p97
+sg85
+S'<module>'
+p98
+sa(dp99
+g62
+S'/home/dhruv/web2py/gluon/globals.py'
+p100
+sg64
+(dp101
+S'self'
+p102
+S'undefined'
+p103
+sS'f'
+S'<function contributor_manager>'
+p104
+ssg70
+I393
+sg71
+(dp105
+I388
+S"        self.flash = ''            # used by the default view layout"
+p106
+sI389
+S'        self.meta = Storage()      # used by web2py_ajax.html'
+p107
+sI390
+S'        self.menu = []             # used by the default view layout'
+p108
+sI391
+S'        self.files = []            # used by web2py_ajax.html'
+p109
+sI392
+S'        self._vars = None'
+p110
+sI393
+S'        self._caller = lambda f: f()'
+p111
+sI394
+S'        self._view_environment = None'
+p112
+sI395
+S'        self._custom_commit = None'
+p113
+sI396
+S'        self._custom_rollback = None'
+p114
+sI397
+S"        self.generic_patterns = ['*']"
+p115
+ssg83
+S'(f=<function contributor_manager>)'
+p116
+sg85
+S'<lambda>'
+p117
+sa(dp118
+g62
+S'/home/dhruv/web2py/applications/critico/controllers/default.py'
+p119
+sg64
+(dp120
+S'session.auth'
+p121
+S'None'
+p122
+sS'adminId'
+p123
+g103
+sS'session.auth.user'
+p124
+g103
+sS'global session'
+p125
+S'<Storage {}>'
+p126
+ssg70
+I91
+sg71
+(dp127
+I86
+S'        if edId != getSubEditionEditionId(subEdId):'
+p128
+sI87
+S'            return'
+p129
+sI88
+S'    return dict(form=getSubEditionProfile(subedId, edId, prodId))'
+p130
+sI89
+S''
+sI90
+S'def contributor_manager():'
+p131
+sI91
+S'    adminId = session.auth.user.id'
+p132
+sI92
+S'    prodId = getProductIdOrNewProductId(adminId)'
+p133
+sI93
+S'    return dict(form=getContributorManager(prodId))'
+p134
+sI94
+S''
+sI95
+S'def contributor_profile():'
+p135
+ssg83
+S'()'
+p136
+sg85
+S'contributor_manager'
+p137
+sasS'pyver'
+p138
+S'Python 2.7.6: /usr/bin/python (prefix: /usr)'
+p139
+sS'session'
+p140
+g57
+(S's\x1a\x00\x00\x00<div><table></table></div>'
+tRp141
+sS'etype'
+p142
+S"<type 'exceptions.AttributeError'>"
+p143
+sS'date'
+p144
+S'Fri Apr  3 11:39:56 2015'
+p145
+sS'response'
+p146
+g57
+(S's\x851\x00\x00<div><table><tr><td style="font-weight:bold;vertical-align:top;">body</td><td style="vertical-align:top;">:</td><td><div>&lt;cStringIO.StringO object at 0x7f8ac82d3ae8&gt;</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">cookies</td><td style="vertical-align:top;">:</td><td><div><table><tr><td style="font-weight:bold;vertical-align:top;">session_id_critico</td><td style="vertical-align:top;">:</td><td><div>127.0.0.1-281ae361-6871-413d-a698-162ab022e72a<table><tr><td style="font-weight:bold;vertical-align:top;">comment</td><td style="vertical-align:top;">:</td><td><div></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">domain</td><td style="vertical-align:top;">:</td><td><div></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">expires</td><td style="vertical-align:top;">:</td><td><div></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">httponly</td><td style="vertical-align:top;">:</td><td><div></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">max-age</td><td style="vertical-align:top;">:</td><td><div></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">path</td><td style="vertical-align:top;">:</td><td><div>/</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">secure</td><td style="vertical-align:top;">:</td><td><div></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">version</td><td style="vertical-align:top;">:</td><td><div></div></td></tr></table></div></td></tr></table></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">delimiters</td><td style="vertical-align:top;">:</td><td><div><table><tr><td><div>{{</div></td></tr><tr><td><div>}}</div></td></tr></table></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">files</td><td style="vertical-align:top;">:</td><td><div><table></table></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">flash</td><td style="vertical-align:top;">:</td><td><div></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">form_label_separator</td><td style="vertical-align:top;">:</td><td><div>: </div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">formstyle</td><td style="vertical-align:top;">:</td><td><div>table3cols</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">generic_patterns</td><td style="vertical-align:top;">:</td><td><div><table><tr><td><div>*</div></td></tr></table></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">google_analytics_id</td><td style="vertical-align:top;">:</td><td><div>None</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">headers</td><td style="vertical-align:top;">:</td><td><div><table><tr><td style="font-weight:bold;vertical-align:top;">X-Powered-By</td><td style="vertical-align:top;">:</td><td><div>web2py</div></td></tr></table></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">logo</td><td style="vertical-align:top;">:</td><td><div><a class="brand" href="http://www.web2py.com/"><b>web<span>2</span>py</b>&trade;&nbsp;</a></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">menu</td><td style="vertical-align:top;">:</td><td><div><table><tr><td><div><table><tr><td><div>Home</div></td></tr><tr><td><div>False</div></td></tr><tr><td><div>/critico/default/index</div></td></tr><tr><td><div><table></table></div></td></tr></table></div></td></tr><tr><td><div><table><tr><td><div><span class="highlighted">web2py</span></div></td></tr><tr><td><div>False</div></td></tr><tr><td><div>http://web2py.com</div></td></tr><tr><td><div><table><tr><td><div><table><tr><td><div>My Sites</div></td></tr><tr><td><div>False</div></td></tr><tr><td><div>/admin/default/site</div></td></tr></table></div></td></tr><tr><td><div><table><tr><td><div>This App</div></td></tr><tr><td><div>False</div></td></tr><tr><td><div>/admin/default/design/critico</div></td></tr><tr><td><div>[(&lt;lazyT &#x27;Controller&#x27;&gt;, False, &#x27;/admin/default/edit/critico/controllers/default.py&#x27;), (&lt;lazyT &#x27;View&#x27;&gt;, False, &#x27;/admin/default/edit/critico/views/default/contributor_manager.html&#x27;), (&lt;lazyT &#x27;Layout&#x27;&gt;, False, &#x27;/admin/default/edit/critico/views/layout.html&#x27;), (&lt;lazyT &#x27;Stylesheet&#x27;&gt;, False, &#x27;/admin/default/edit/critico/static/css/web2py.css&#x27;), (&lt;lazyT &#x27;DB Model&#x27;&gt;, False, &#x27;/admin/default/edit/critico/models/db.py&#x27;), (&lt;lazyT &#x27;Menu Model&#x27;&gt;, False, &#x27;/admin/default/edit/critico/models/menu.py&#x27;), (&lt;lazyT &#x27;Database&#x27;&gt;, False, &#x27;/critico/appadmin/index&#x27;), (&lt;lazyT &#x27;Errors&#x27;&gt;, False, &#x27;/admin/default/errors/critico&#x27;), (&lt;lazyT &#x27;About&#x27;&gt;, False, &#x27;/admin/default/about/critico&#x27;)]</div></td></tr></table></div></td></tr><tr><td><div><table><tr><td><div>web2py.com</div></td></tr><tr><td><div>False</div></td></tr><tr><td><div>http://www.web2py.com</div></td></tr><tr><td><div>[(&lt;lazyT &#x27;Download&#x27;&gt;, False, &#x27;http://www.web2py.com/examples/default/download&#x27;), (&lt;lazyT &#x27;Support&#x27;&gt;, False, &#x27;http://www.web2py.com/examples/default/support&#x27;), (&lt;lazyT &#x27;Demo&#x27;&gt;, False, &#x27;http://web2py.com/demo_admin&#x27;), (&lt;lazyT &#x27;Quick Examples&#x27;&gt;, False, &#x27;http://web2py.com/examples/default/examples&#x27;), (&lt;lazyT &#x27;FAQ&#x27;&gt;, False, &#x27;http://web2py.com/AlterEgo&#x27;), (&lt;lazyT &#x27;Videos&#x27;&gt;, False, &#x27;http://www.web2py.com/examples/default/videos/&#x27;), (&lt;lazyT &#x27;Free Applications&#x27;&gt;, False, &#x27;http://web2py.com/appliances&#x27;), (&lt;lazyT &#x27;Plugins&#x27;&gt;, False, &#x27;http://web2py.com/plugins&#x27;), (&lt;lazyT &#x27;Layouts&#x27;&gt;, False, &#x27;http://web2py.com/layouts&#x27;), (&lt;lazyT &#x27;Recipes&#x27;&gt;, False, &#x27;http://web2pyslices.com/&#x27;), (&lt;lazyT &#x27;Semantic&#x27;&gt;, False, &#x27;http://web2py.com/semantic&#x27;)]</div></td></tr></table></div></td></tr><tr><td><div><table><tr><td><div>Documentation</div></td></tr><tr><td><div>False</div></td></tr><tr><td><div>http://www.web2py.com/book</div></td></tr><tr><td><div>[(&lt;lazyT &#x27;Preface&#x27;&gt;, False, &#x27;http://www.web2py.com/book/default/chapter/00&#x27;), (&lt;lazyT &#x27;Introduction&#x27;&gt;, False, &#x27;http://www.web2py.com/book/default/chapter/01&#x27;), (&lt;lazyT &#x27;Python&#x27;&gt;, False, &#x27;http://www.web2py.com/book/default/chapter/02&#x27;), (&lt;lazyT &#x27;Overview&#x27;&gt;, False, &#x27;http://www.web2py.com/book/default/chapter/03&#x27;), (&lt;lazyT &#x27;The Core&#x27;&gt;, False, &#x27;http://www.web2py.com/book/default/chapter/04&#x27;), (&lt;lazyT &#x27;The Views&#x27;&gt;, False, &#x27;http://www.web2py.com/book/default/chapter/05&#x27;), (&lt;lazyT &#x27;Database&#x27;&gt;, False, &#x27;http://www.web2py.com/book/default/chapter/06&#x27;), (&lt;lazyT &#x27;Forms and Validators&#x27;&gt;, False, &#x27;http://www.web2py.com/book/default/chapter/07&#x27;), (&lt;lazyT &#x27;Email and SMS&#x27;&gt;, False, &#x27;http://www.web2py.com/book/default/chapter/08&#x27;), (&lt;lazyT &#x27;Access Control&#x27;&gt;, False, &#x27;http://www.web2py.com/book/default/chapter/09&#x27;), (&lt;lazyT &#x27;Services&#x27;&gt;, False, &#x27;http://www.web2py.com/book/default/chapter/10&#x27;), (&lt;lazyT &#x27;Ajax Recipes&#x27;&gt;, False, &#x27;http://www.web2py.com/book/default/chapter/11&#x27;), (&lt;lazyT &#x27;Components and Plugins&#x27;&gt;, False, &#x27;http://www.web2py.com/book/default/chapter/12&#x27;), (&lt;lazyT &#x27;Deployment Recipes&#x27;&gt;, False, &#x27;http://www.web2py.com/book/default/chapter/13&#x27;), (&lt;lazyT &#x27;Other Recipes&#x27;&gt;, False, &#x27;http://www.web2py.com/book/default/chapter/14&#x27;), (&lt;lazyT &#x27;Buy this book&#x27;&gt;, False, &#x27;http://stores.lulu.com/web2py&#x27;)]</div></td></tr></table></div></td></tr><tr><td><div><table><tr><td><div>Community</div></td></tr><tr><td><div>False</div></td></tr><tr><td><div>None</div></td></tr><tr><td><div>[(&lt;lazyT &#x27;Groups&#x27;&gt;, False, &#x27;http://www.web2py.com/examples/default/usergroups&#x27;), (&lt;lazyT &#x27;Twitter&#x27;&gt;, False, &#x27;http://twitter.com/web2py&#x27;), (&lt;lazyT &#x27;Live Chat&#x27;&gt;, False, &#x27;http://webchat.freenode.net/?channels=web2py&#x27;)]</div></td></tr></table></div></td></tr><tr><td><div><table><tr><td><div>Plugins</div></td></tr><tr><td><div>False</div></td></tr><tr><td><div>None</div></td></tr><tr><td><div>[(&#x27;plugin_wiki&#x27;, False, &#x27;http://web2py.com/examples/default/download&#x27;), (&lt;lazyT &#x27;Other Plugins&#x27;&gt;, False, &#x27;http://web2py.com/plugins&#x27;), (&lt;lazyT &#x27;Layout Plugins&#x27;&gt;, False, &#x27;http://web2py.com/layouts&#x27;)]</div></td></tr></table></div></td></tr></table></div></td></tr></table></div></td></tr></table></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">meta</td><td style="vertical-align:top;">:</td><td><div><table><tr><td style="font-weight:bold;vertical-align:top;">author</td><td style="vertical-align:top;">:</td><td><div>Your Name &lt;you@example.com&gt;</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">generator</td><td style="vertical-align:top;">:</td><td><div>Web2py Web Framework</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">keywords</td><td style="vertical-align:top;">:</td><td><div>web2py, python, framework</div></td></tr></table></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">models_to_run</td><td style="vertical-align:top;">:</td><td><div><table><tr><td><div>^\\w+\\.py$</div></td></tr><tr><td><div>^default/\\w+\\.py$</div></td></tr><tr><td><div>^default/contributor_manager/\\w+\\.py$</div></td></tr></table></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">postprocessing</td><td style="vertical-align:top;">:</td><td><div><table></table></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">session_client</td><td style="vertical-align:top;">:</td><td><div>127.0.0.1</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">session_cookie_compression_level</td><td style="vertical-align:top;">:</td><td><div>None</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">session_cookie_expires</td><td style="vertical-align:top;">:</td><td><div>None</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">session_cookie_key</td><td style="vertical-align:top;">:</td><td><div>None</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">session_data_name</td><td style="vertical-align:top;">:</td><td><div>session_data_critico</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">session_filename</td><td style="vertical-align:top;">:</td><td><div>/home/dhruv/web2py/applications/critico/sessions/127.0.0.1-c1cc14ce-e7b8-42af-aeef-2dff1d64bd53</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">session_hash</td><td style="vertical-align:top;">:</td><td><div>ddd4fdeec9595dbe2e9842d101fc3c6b</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">session_id</td><td style="vertical-align:top;">:</td><td><div>127.0.0.1-c1cc14ce-e7b8-42af-aeef-2dff1d64bd53</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">session_id_name</td><td style="vertical-align:top;">:</td><td><div>session_id_critico</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">session_locked</td><td style="vertical-align:top;">:</td><td><div>False</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">session_masterapp</td><td style="vertical-align:top;">:</td><td><div>critico</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">session_new</td><td style="vertical-align:top;">:</td><td><div>True</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">session_storage_type</td><td style="vertical-align:top;">:</td><td><div>file</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">status</td><td style="vertical-align:top;">:</td><td><div>200</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">subtitle</td><td style="vertical-align:top;">:</td><td><div></div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">title</td><td style="vertical-align:top;">:</td><td><div>Critico</div></td></tr><tr><td style="font-weight:bold;vertical-align:top;">view</td><td style="vertical-align:top;">:</td><td><div>default/contributor_manager.html</div></td></tr></table></div>'
+tRp147
+sS'locals'
+p148
+(dp149
+ssS'traceback'
+p150
+S'Traceback (most recent call last):\n  File "/home/dhruv/web2py/gluon/restricted.py", line 224, in restricted\n    exec ccode in environment\n  File "/home/dhruv/web2py/applications/critico/controllers/default.py", line 697, in <module>\n  File "/home/dhruv/web2py/gluon/globals.py", line 393, in <lambda>\n    self._caller = lambda f: f()\n  File "/home/dhruv/web2py/applications/critico/controllers/default.py", line 91, in contributor_manager\n    adminId = session.auth.user.id\nAttributeError: \'NoneType\' object has no attribute \'user\'\n'
+p151
+s.

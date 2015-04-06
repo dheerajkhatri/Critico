@@ -1,0 +1,22 @@
+def getContributorManager(prodId):
+    form = SQLFORM.factory(submit_button='Add Edition')
+    form.add_button('Back', URL(INDEX_PAGE))
+    rows = db(db.contributor.product_ref == prodId).select()
+    for row in rows:
+        str_=('Edit Contributor Profile: ' + str(row.real_name))
+        form.add_button(str_, URL(CONTRIBUTOR_PROFILE_PAGE, vars=dict(contrib=str(row.id))))
+    if form.accepts(request, session):
+        redirect(URL(CONTRIBUTOR_PROFILE_PAGE, vars=dict(contrib='')))
+    return form
+
+def getContributorProfile(edId, prodId):
+    update = db.edition(edId)
+    form = SQLFORM(db.edition, update, deletable=True, showid=False, submit_button='Apply Changes', upload=URL(r=request,f='download'))
+    form.add_button('Back', URL(EDITION_MANAGER_PAGE))
+    if form.accepts(request, session):
+        updateContributorProductId(form.vars.id, prodId)
+        if form.deleted:
+            redirect(URL(EDITION_MANAGER_PAGE))
+        else:
+            redirect(URL(CONTRIBUTOR_PROFILE_PAGE,  vars=dict(contrib=str(form.vars.id))))
+    return form

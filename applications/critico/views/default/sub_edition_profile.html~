@@ -1,0 +1,9 @@
+{{left_sidebar_enabled,right_sidebar_enabled=False,('message' in globals())}}
+{{extend 'layout.html'}}{{left_sidebar_enabled,right_sidebar_enabled=False,('message' in globals())}}
+<button onclick="location.href = '{{=product_name}}';">Back</button>
+<h3>Episodes</h3>
+{{if isinstance(sub_edition_info, list):}}{{for f in sub_edition_info:}}{{=f}}{{pass}}{{else:}}{{=sub_edition_info}}{{pass}}
+<h3>Videos</h3>
+{{if isinstance(video_info, list):}}{{for f in video_info:}}{{=f}}{{pass}}{{else:}}{{=video_info}}{{pass}}
+<h3>Reviews</h3>
+{{if isinstance(review_info, list):}}{{for f in review_info:}}{{=f}}{{pass}}{{else:}}{{=review_info}}{{pass}}

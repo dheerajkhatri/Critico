@@ -1,0 +1,14 @@
+{{left_sidebar_enabled,right_sidebar_enabled=False,('message' in globals())}}
+{{extend 'layout.html'}}
+<h3>Soap</h3>
+{{if isinstance(product_info, list):}}{{for f in product_info:}}{{=f}}{{pass}}{{else:}}{{=product_info}}{{pass}}
+<h3>Cast</h3>
+{{if isinstance(contrib_info, list):}}{{for f in contrib_info:}}{{=f}}{{pass}}{{else:}}{{=contrib_info}}{{pass}}
+<h3>Seasons</h3>
+{{if isinstance(edition_info, list):}}{{for f in edition_info:}}{{=f}}{{pass}}{{else:}}{{=edition_info}}{{pass}}
+<h3>News</h3>
+{{if isinstance(news_info, list):}}{{for f in news_info:}}{{=f}}{{pass}}{{else:}}{{=news_info}}{{pass}}
+<h3>Videos</h3>
+{{if isinstance(video_info, list):}}{{for f in video_info:}}{{=f}}{{pass}}{{else:}}{{=video_info}}{{pass}}
+<h3>Reviews</h3>
+{{if isinstance(review_info, list):}}{{for f in review_info:}}{{=f}}{{pass}}{{else:}}{{=review_info}}{{pass}}
