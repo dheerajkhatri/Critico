@@ -6,63 +6,60 @@ each season and finally, to provide latest spicy gossips associated with the sta
 soaps for the fans. Please read further for complete description of our application.
 Conventions Used
 
-1. Page: A screen of the application
+####1. Page: A screen of the application
   
-2. Dock: Some fixed defined region of a Page.
+####2. Dock: Some fixed defined region of a Page.
   
-3. Review meter: A meter displaying average rating of the soap with respect to different aspects:
+####3. Review meter: A meter displaying average rating of the soap with respect to different aspects:
   
-  * • Action
+  * Action
   
-  * • Adventure
+  * Adventure
   
-  * • Comedy
+  * Comedy
   
-  * • Fiction
+  * Fiction
   
-  * • Crime
+  * Crime
   
-  * • Mystery
+  * Mystery
   
 1. Following are the screens/pages in our application as planned:
 
-  * • Main Page
+  * Main Page
   
-  * • SOAP Page (for each soap in the database)
+  * SOAP Page (for each soap in the database)
   
-  * • All Season Page
+  * All Season Page
   
-  * • All Episode Page
+  * All Episode Page
   
-  * • Single Episode Page
+  * Single Episode Page
   
-  * • Review Page
+  * Review Page
   
-  * • User Page
+  * User Page
   
 NOTE:
 
-  * • Only registered users can use the application.
-  * 
-  * • A SEARCH BAR will be there on each page to help the user navigate to the desired SOAP Page.
-  * 
-  * • Rating will be a 10-star based rating in some cases like overall rating of the soap and a 5 star
+  * Only registered users can use the application.
+  
+  * A SEARCH BAR will be there on each page to help the user navigate to the desired SOAP Page.
+  
+  * Rating will be a 10-star based rating in some cases like overall rating of the soap and a 5 star
 based rating for others like rating of a review.Main Page:
 
 
 
 1. Main page comprises of:
-
+###Main Page:
   * a. Registration
-  * 
   * b. About us related stuff
 
 
 
 2. Once you are logged in you'll be directed to User Page
-
-
-User Page:
+###User Page:
 1. User page comprises of:
   * a. A dock with a minimal personal info
   * b. A dock with all the reviews written by the user
@@ -70,8 +67,7 @@ User Page:
 to show the OVERALL and the ASPECT based rating given by the user to the corresponding soap.
 
 
-SOAP Page:
-
+###SOAP Page:
 1. SOAP page comprises of:
    * a. SOAP Cover pic with the average OVERALL rating over it
    * b. A dock of SOAP cast linked to their wiki pages or their websites
@@ -90,6 +86,8 @@ reviews of the SOAP.
 EPISODE BASED reviews of the SOAP.
 4. Single Episode Page comprises of the respective episode details with the SINGLE EP.
 BASED review.
-Review Page:
+
+
+###Review Page:
 1. Each review in any dock is hyper-linked to the corresponding full view review page which
 we call Review page.
